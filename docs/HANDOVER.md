@@ -50,6 +50,22 @@ and the version is given whenever a build is shared.
 
 ## Current state (2026-11-04)
 
+- **STIL tune info (0.6.0, branch claude/project-thread-lcoe5w):** for SID
+  tunes, Now playing shows HVSC STIL.txt notes (current subtune: titles,
+  artists, comments of covers; the whole tune; the composer's or group's
+  folder comment) and BUGlist.txt known issues. The STIL title of the
+  playing subtune also shows under the composer. Short landscape layout
+  (Ayn Thor): a "Scopes | Info" switch above the right panel (remembered;
+  a dot on Info means there are notes). Taller layouts (Windows window,
+  phone portrait): a "Tune info" section below the subtunes. STIL.txt is
+  picked up automatically from DOCUMENTS beside Songlengths.md5 or from a
+  library location, or set in Settings ("Tune info"). Same Dart code on
+  Windows and Android; no core changes. Code: `app/lib/hvsc/stil.dart`
+  (parser, unit tests in `app/test/stil_test.dart`, run by CI),
+  `app/lib/ui/tune_info.dart`. Not yet tried with the real STIL.txt
+  (HVSC is blocked in the cloud). Screenshot:
+  docs/screenshots/stil-landscape-info.png.
+
 - **Per-channel visualiser (0.5.0, branch claude/project-thread-cc200r):**
   Now playing shows one oscilloscope per channel: SID V1-V3 + Digi (the
   $D418 volume digis/drums) per chip, SNDH A/B/C + STE DAC, YM A/B/C.
@@ -205,7 +221,8 @@ button; "Rebuild index" in Music locations re-reads everything. Folder
 browser with breadcrumbs and per-folder tune counts, play/add a whole
 folder, instant search (all words must match title, composer, released or
 folder) with a C64/Atari filter. If a location contains
-DOCUMENTS/Songlengths.md5 it is picked up automatically.
+DOCUMENTS/Songlengths.md5 or DOCUMENTS/STIL.txt they are picked up
+automatically.
 Code: `app/lib/library/library.dart`, `app/lib/ui/library_panel.dart`.
 
 Layouts (shared by every platform, chosen by window size in
@@ -242,7 +259,8 @@ Digi, Atari YM channels + STE DAC; `lib/ui/visualizer.dart`, data from
 `cd_channel_scope`) or the mixed scope with per-voice activity (waveform,
 note, level), progress with Songlengths support, transport, subtune picker,
 volume, auto-advance modes (all subtunes then next, next tune, repeat),
-shuffle, settings (SID model, Songlengths.md5, default length).
+shuffle, settings (SID model, Songlengths.md5, STIL.txt, default length),
+STIL/BUGlist tune info for SID tunes (`lib/ui/tune_info.dart`).
 Keys: Space play/pause, Left/Right subtune, N/P tune, +/- volume.
 
 ### The Android app
@@ -352,5 +370,9 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
    them. Later: seeking (`FastForward`), per-voice mute/VU via
    `AudioRenderWithVisualInfos`, browsing the SNDH archive zip
    (SNDH_YM_PLAN.md milestones A3 to A5).
-4. Nice to have: drag and drop files onto the window, STIL comments,
+4. STIL info (0.6.0): Stephen checks it with real HVSC on the Ayn Thor and
+   Windows (a cover tune with several subtunes, e.g. in /MUSICIANS/H/
+   Hubbard_Rob, and a tune listed in BUGlist.txt). Possible follow-ups:
+   show STIL in the library (search comments), a "composer" page.
+5. Nice to have: drag and drop files onto the window,
    HVSC browser, app icon, installer (MSIX or Inno Setup).

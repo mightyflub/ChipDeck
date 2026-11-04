@@ -16,6 +16,8 @@ Future<void> main() async {
   final library = await LibraryController.create();
   library.songlengthsPath = () => controller.songlengthsPath;
   library.onSonglengthsFound = (path) => controller.setSonglengths(path);
+  library.stilPath = () => controller.stilPath;
+  library.onStilFound = (path) => controller.setStil(path);
   // A new Songlengths file changes lengths for every tune: refresh the index.
   controller.onSonglengthsChanged = () => library.rescan(full: true);
   await loadSecondScreenSetting();
