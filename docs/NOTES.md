@@ -462,4 +462,73 @@ MOD, an 8-channel MOD, a big XM (20+ channels), and a PowerPacked mod.
 Library filter chip shortened to "MOD / XM" (the long label overran the
 wide layout); the chip row now scrolls sideways when narrow. Stephen
 confirmed MOD playback on Windows (0.7.0-test.68); XM untested on real
-files for now, merged on his say-so.
+files for now, merged on his say-so. Later the same day Stephen confirmed
+XM works too, including 8+ channel XMs and the visualiser.
+
+## 2026-11-04: TFMX and TFMX-ST (0.8.0)
+
+Stephen asked for TFMX and TFMX-ST.
+
+What they are:
+
+- **TFMX** ("The Final Musicsystem eXtended") is Chris Huelsbeck's Amiga
+  music system: a music data file (`mdat.name`, header "TFMX-SONG ") and a
+  samples file (`smpl.name`). Variants: v1.5, Pro, 7V (7 voices).
+- **TFMX-ST** is the Atari ST version (Huelsbeck and Rudolf Stember,
+  1991-92). Same file pair and the same sequencer/pattern format, but the
+  instrument macros drive the YM2149 (macro commands $40-$4A: tone/noise
+  mixer, hardware envelope, noise period, digi samples). Modland keeps
+  them in "TFMX ST"; UADE calls them MDST.
+- Jochen Hippel's TFMX (and Future Composer) is a different format that
+  shares the name; it comes free with the library below.
+
+Engines:
+
+- libxmp has no TFMX. **libtfmxaudiodecoder** (Michael Schwendt, GPL-2.0+,
+  C++, maintained, used by Audacious/DeaDBeeF/rePlayer) plays Huelsbeck
+  TFMX v1/Pro/7V, Hippel TFMX/COSO/7V, Future Composer and Dynamic
+  Synthesizer. Vendored at master 93b99ec (1.0.14). It explicitly rejects
+  Atari ST TFMX files.
+- UADE has a TFMX-ST player, but it is an Amiga EaglePlayer run inside an
+  Amiga emulator (with Hippel's YM emulation on Paula): too heavy for
+  ChipDeck. Its source (`amigasrc/players/wanted_team/TFMX_ST/TFMX ST_v1.asm`)
+  contains Huelsbeck's own commented ST replay ("versionnum $0892,
+  last 18.9.92"), so we **ported that to C++** (`core/src/tfmxst_backend.cpp`,
+  ~900 lines) and feed AtariAudio's real YM2149 emulation (`Ym2149c`)
+  instead of the Paula emulation. The port keeps the original labels and
+  quirks (pattern $F9 return always restores track 1; portamento notes use
+  the Amiga period table; the noise/envelope pseudo voice writes its
+  "volume" to the noise period register).
+- Not in that source: the ST "digisound" routine. Approximation: macro $48
+  starts a 4-bit sample (one YM volume nibble per byte) from the smpl file
+  on that voice's volume register, at the rate from macro $49 taken as an
+  Amiga period (like the Wanted Team player; default $240), until the next
+  sample, $4A, or the end of the file. If real files sound wrong, this is
+  the first place to look.
+- Song lengths: a dry run of the replay at 50 Hz until the song wraps or
+  stops (cap 30 min). Subtunes: valid, distinct start/end step pairs.
+
+Integration:
+
+- Core order for files that are not SID/SNDH/YM: TFMX-ST check (UADE's
+  test: "TFMX-SONG" header and a macro byte > $3F between the first macro
+  and the pointer at $7FC), then libtfmxaudiodecoder, then libxmp.
+- The samples file is found next to the music file: mdat.x -> smpl.x
+  (also SMPL./Smpl., smpl.set), x.mdat -> x.smpl, x.tfx -> x.sam. Loading
+  from memory has no samples file: Amiga TFMX pairs then fail; TFMX-ST
+  plays without digi drums.
+- libtfmxaudiodecoder patches (third_party/README.md): per-voice scope tap
+  in its Paula mixer; UTF-8 paths on Windows; a leaked decoder per probe.
+- MSVC needs `/FIiso646.h` for upstream's `and` keyword.
+- App: new names in `isSupportedFile` (prefixes mdat./hip./hipc./hip7./fc.,
+  extensions .mdat .tfx .tfm .tfmx .hip .hipc .hip7 .sog .fc .fc13 .fc14
+  .smod), Windows picker list, badges TFMX/FC, Now playing format chip
+  "TFMX-ST" or the library's name without "(AMIGA)". Licenses page lists
+  libtfmxaudiodecoder and the TFMX-ST replay.
+- Tests: our own public-domain pairs `tests/data/mdat.chipdeck-test` (+smpl,
+  Amiga, square lead + saw bass, 2 subtunes) and `mdat.chipdeck-st-test`
+  (+smpl, ST: tone lead with decay, vibrato bass, noise hi-hat, digi drum
+  in subtune 2). `tests/tfmx_test.cpp` checks probe, channels, scopes,
+  subtunes; passes under ASan/UBSan.
+
+Not tested: real TFMX or TFMX-ST files (Modland is blocked in the cloud).

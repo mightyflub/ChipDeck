@@ -2,13 +2,18 @@
  * ChipDeck core implementation.
  * SID via libsidplayfp + reSIDfp; Atari ST .sndh/.ym via AtariAudio
  * (see atari_backend.cpp); Amiga .mod and other tracker modules via libxmp
- * (see mod_backend.cpp). A cd_player holds one tune of any kind.
+ * (see mod_backend.cpp); Amiga TFMX and Hippel TFMX / Future Composer via
+ * libtfmxaudiodecoder (see tfmx_backend.cpp); Atari ST TFMX-ST by our own
+ * replay port (see tfmxst_backend.cpp). A cd_player holds one tune
+ * of any kind.
  * Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
  */
 #define CHIPDECK_BUILDING
 #include "chipdeck/chipdeck.h"
 #include "atari_backend.h"
 #include "mod_backend.h"
+#include "tfmx_backend.h"
+#include "tfmxst_backend.h"
 
 #include <algorithm>
 #include <cctype>
@@ -139,6 +144,58 @@ std::unique_ptr<chipdeck::ModTune> tryModFile(const char* path, size_t size, uin
     return t;
 }
 
+// TFMX file pairs: the samples file that belongs to music data `path`
+// (mdat.x -> smpl.x, x.mdat -> x.smpl, x.tfx -> x.sam; either case).
+std::string tfmxSamplesPath(const std::string& path, std::vector<uint8_t>& smpl)
+{
+    const size_t slash = path.find_last_of("/\\");
+    const std::string dir = slash == std::string::npos ? "" : path.substr(0, slash + 1);
+    const std::string file = slash == std::string::npos ? path : path.substr(slash + 1);
+    std::vector<std::string> tries;
+    auto lower = [](std::string x) {
+        for (char& c : x) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return x;
+    };
+    const std::string lf = lower(file);
+    if (lf.rfind("mdat.", 0) == 0)
+    {
+        const std::string rest = file.substr(5);
+        tries = { "smpl." + rest, "SMPL." + rest, "Smpl." + rest, "smpl.set", "SMPL.set" };
+    }
+    const size_t dot = file.find_last_of('.');
+    if (dot != std::string::npos)
+    {
+        const std::string stem = file.substr(0, dot), ext = lower(file.substr(dot + 1));
+        if (ext == "mdat") { tries.push_back(stem + ".smpl"); tries.push_back(stem + ".SMPL"); }
+        if (ext == "tfx") { tries.push_back(stem + ".sam"); tries.push_back(stem + ".SAM"); }
+    }
+    for (const std::string& t : tries)
+        if (readFile((dir + t).c_str(), smpl)) return dir + t;
+    smpl.clear();
+    return std::string();
+}
+
+// Title for tunes without one: the file name without "mdat." or extension.
+std::string tuneNameFromPath(const char* path)
+{
+    std::string s(path ? path : "");
+    const size_t slash = s.find_last_of("/\\");
+    if (slash != std::string::npos) s = s.substr(slash + 1);
+    if (s.size() > 5 && (s.compare(0, 5, "mdat.") == 0 || s.compare(0, 5, "MDAT.") == 0))
+        return s.substr(5);
+    const size_t dot = s.find_last_of('.');
+    return dot == std::string::npos ? s : s.substr(0, dot);
+}
+
+std::unique_ptr<chipdeck::TfmxStTune> loadTfmxSt(const char* path, const std::vector<uint8_t>& bytes,
+                                                 uint32_t rate, int subtune, std::string& err)
+{
+    std::vector<uint8_t> smpl;
+    if (path) tfmxSamplesPath(path, smpl);
+    return chipdeck::TfmxStTune::load(bytes.data(), bytes.size(), smpl.data(), smpl.size(),
+                                      tuneNameFromPath(path), rate, subtune, err);
+}
+
 } // namespace
 
 struct cd_player
@@ -161,6 +218,10 @@ struct cd_player
     std::unique_ptr<chipdeck::AtariTune> atari;
     // Set when the loaded tune is a tracker module (Amiga .mod etc.).
     std::unique_ptr<chipdeck::ModTune> mod;
+    // Set when the loaded tune is TFMX / Hippel / Future Composer.
+    std::unique_ptr<chipdeck::TfmxTune> tfmx;
+    // Set when the loaded tune is Atari ST TFMX-ST.
+    std::unique_ptr<chipdeck::TfmxStTune> tfmxst;
 
     std::vector<short> chunk;  // engine output, interleaved stereo
     size_t chunkPos = 0;       // next unread int16 in chunk
@@ -283,6 +344,8 @@ struct cd_player
         tune.reset();
         atari.reset();
         mod.reset();
+        tfmx.reset();
+        tfmxst.reset();
         ready = false;
     }
 
@@ -312,6 +375,28 @@ struct cd_player
         return 0;
     }
 
+    int useTfmx(std::unique_ptr<chipdeck::TfmxTune> t)
+    {
+        tfmx = std::move(t);
+        std::vector<std::string> names;
+        for (int c = 0; c < tfmx->channelCount(); ++c)
+            names.push_back(tfmx->channelName(c));
+        setChannels(std::move(names));
+        error.clear();
+        return 0;
+    }
+
+    int useTfmxSt(std::unique_ptr<chipdeck::TfmxStTune> t)
+    {
+        tfmxst = std::move(t);
+        std::vector<std::string> names;
+        for (int c = 0; c < tfmxst->channelCount(); ++c)
+            names.push_back(tfmxst->channelName(c));
+        setChannels(std::move(names));
+        error.clear();
+        return 0;
+    }
+
     int finishLoad(int subtune)
     {
         if (!tune->getStatus())
@@ -328,7 +413,7 @@ extern "C" {
 
 const char* cd_version(void)
 {
-    return CHIPDECK_VERSION " (libsidplayfp 3.1.2, libresidfp 1.2.3, AtariAudio 1.27, libxmp 4.6.3)";
+    return CHIPDECK_VERSION " (libsidplayfp 3.1.2, libresidfp 1.2.3, AtariAudio 1.27, libxmp 4.6.3, libtfmxaudiodecoder 1.0.14)";
 }
 
 cd_player* cd_create(uint32_t sample_rate)
@@ -414,6 +499,15 @@ int cd_load_file(cd_player* p, const char* path, int subtune)
         if (read && !isSidFile(bytes) && !isC64Extension(path))
         {
             std::string err;
+            if (chipdeck::isTfmxStData(bytes.data(), bytes.size()))
+            {
+                auto st = loadTfmxSt(path, bytes, p->sampleRate, subtune, err);
+                if (st) return p->useTfmxSt(std::move(st));
+                return p->fail(err);
+            }
+            auto t = chipdeck::TfmxTune::load(bytes.data(), bytes.size(), path,
+                                              p->sampleRate, subtune, err);
+            if (t) return p->useTfmx(std::move(t));
             auto m = tryModFile(path, bytes.size(), p->sampleRate, subtune, err);
             if (m) return p->useMod(std::move(m), err);
         }
@@ -436,6 +530,15 @@ int cd_load_memory(cd_player* p, const void* data, size_t size, int subtune)
         if (!(size >= 4 && (std::memcmp(bytes, "PSID", 4) == 0 || std::memcmp(bytes, "RSID", 4) == 0)))
         {
             std::string err;
+            if (chipdeck::isTfmxStData(bytes, size))
+            {
+                auto st = chipdeck::TfmxStTune::load(bytes, size, nullptr, 0, "", p->sampleRate,
+                                                     subtune, err);
+                if (st) return p->useTfmxSt(std::move(st));
+                return p->fail(err);
+            }
+            auto t = chipdeck::TfmxTune::load(bytes, size, nullptr, p->sampleRate, subtune, err);
+            if (t) return p->useTfmx(std::move(t));
             auto m = chipdeck::ModTune::loadMemory(bytes, size, p->sampleRate, subtune, err);
             if (m) return p->useMod(std::move(m), err);
         }
@@ -462,6 +565,21 @@ int cd_select_subtune(cd_player* p, int subtune)
         p->error = "subtune out of range";
         return 1;
     }
+    if (p->tfmxst)
+    {
+        if (p->tfmxst->select(subtune)) { p->setChannels(p->channelNames); return 0; }
+        p->error = "subtune out of range";
+        return 1;
+    }
+    if (p->tfmx)
+    {
+        if (!p->tfmx->select(subtune)) { p->error = "subtune out of range"; return 1; }
+        std::vector<std::string> names;
+        for (int c = 0; c < p->tfmx->channelCount(); ++c)
+            names.push_back(p->tfmx->channelName(c));
+        p->setChannels(std::move(names));
+        return 0;
+    }
     if (!p->tune) return p->fail("no tune loaded");
     const int songs = static_cast<int>(p->tune->getInfo()->songs());
     if (subtune < 1 || subtune > songs)
@@ -480,6 +598,8 @@ int cd_get_info(cd_player* p, cd_info* out)
     out->length_ms = -1;
     if (p->atari) { p->atari->fillInfo(out); return 0; }
     if (p->mod) { p->mod->fillInfo(out); return 0; }
+    if (p->tfmx) { p->tfmx->fillInfo(out); return 0; }
+    if (p->tfmxst) { p->tfmxst->fillInfo(out); return 0; }
     if (!p->tune) return 1;
     const SidTuneInfo* ti = p->tune->getInfo();
     const unsigned nInfo = ti->numberOfInfoStrings();
@@ -518,6 +638,20 @@ size_t cd_render(cd_player* p, int16_t* out, size_t frames)
     {
         p->chanTmp.resize(frames * static_cast<size_t>(p->channels));
         size_t n = p->mod->render(out, frames, p->channels ? p->chanTmp.data() : nullptr);
+        p->pushChannels(p->chanTmp.data(), n);
+        return n;
+    }
+    if (p->tfmxst)
+    {
+        p->chanTmp.resize(frames * static_cast<size_t>(p->channels));
+        size_t n = p->tfmxst->render(out, frames, p->channels ? p->chanTmp.data() : nullptr);
+        p->pushChannels(p->chanTmp.data(), n);
+        return n;
+    }
+    if (p->tfmx)
+    {
+        p->chanTmp.resize(frames * static_cast<size_t>(p->channels));
+        size_t n = p->tfmx->render(out, frames, p->channels ? p->chanTmp.data() : nullptr);
         p->pushChannels(p->chanTmp.data(), n);
         return n;
     }
@@ -573,6 +707,8 @@ uint32_t cd_position_ms(cd_player* p)
     std::lock_guard<std::mutex> g(p->lock);
     if (p->atari) return p->atari->positionMs();
     if (p->mod) return p->mod->positionMs();
+    if (p->tfmx) return p->tfmx->positionMs();
+    if (p->tfmxst) return p->tfmxst->positionMs();
     return p->ready ? p->engine.timeMs() : 0;
 }
 
@@ -588,7 +724,7 @@ int cd_channel_count(cd_player* p)
 {
     if (!p) return 0;
     std::lock_guard<std::mutex> g(p->lock);
-    return (p->atari || p->mod || p->ready) ? p->channels : 0;
+    return (p->atari || p->mod || p->tfmx || p->tfmxst || p->ready) ? p->channels : 0;
 }
 
 int cd_channel_name(cd_player* p, int ch, char* out, size_t cap)
@@ -629,6 +765,17 @@ int cd_probe_file(const char* path, const char* songlengths_path, cd_info* out)
             return chipdeck::AtariTune::probe(bytes.data(), bytes.size(), out) ? 0 : 1;
         if (read && !isSidFile(bytes) && !isC64Extension(path))
         {
+            if (chipdeck::isTfmxStData(bytes.data(), bytes.size()))
+            {
+                std::string err;
+                auto st = loadTfmxSt(path, bytes, 44100, 0, err);
+                if (!st) return 1;
+                st->fillInfo(out);
+                return 0;
+            }
+            if (chipdeck::TfmxTune::probe(bytes.data(), bytes.size(), path, out)) return 0;
+            std::memset(out, 0, sizeof *out);
+            out->length_ms = -1;
             FILE* f = openFile(path);
             if (f)
             {

@@ -337,6 +337,9 @@ class _Header extends StatelessWidget {
   static String _shortFormat(String f) {
     if (f.contains('RSID')) return 'RSID';
     if (f.contains('PSID')) return 'PSID';
+    if (f.startsWith('TFMX-ST')) return 'TFMX-ST';
+    // TFMX / Future Composer names end in " (AMIGA)"; the system chip says it.
+    f = f.replaceAll(' (AMIGA)', '');
     if (f.length > 18) return f.substring(0, 18);
     return f;
   }

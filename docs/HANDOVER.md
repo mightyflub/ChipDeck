@@ -7,7 +7,9 @@ Detailed history and research live in [NOTES.md](NOTES.md).
 
 ChipDeck is a retro chiptune player for **Windows and Android**. It plays
 C64 **.sid**, Atari ST **.sndh** and **.ym**, Amiga **.mod** and
-Fasttracker 2 **.xm** (since 0.6.0). Possibly more formats later.
+Fasttracker 2 **.xm** (since 0.7.0), and Chris Huelsbeck's **TFMX** on the
+Amiga and the Atari ST (**TFMX-ST**), plus Jochen Hippel TFMX and Future
+Composer (since 0.8.0). Possibly more formats later.
 
 ## Keeping Windows and Android in sync
 
@@ -50,6 +52,23 @@ and the version is given whenever a build is shared.
 
 ## Current state (2026-11-04)
 
+- **TFMX and TFMX-ST (0.8.0, branch claude/project-thread-ir84g9):**
+  Amiga TFMX (v1.5, Pro, 7V; also Hippel TFMX and Future Composer, which
+  come with the same library) is played by vendored libtfmxaudiodecoder
+  1.0.14 (GPL-2.0+) in `core/src/tfmx_backend.cpp`, with a ChipDeck patch
+  for per-voice scopes (4, or 8 for 7V). Atari ST **TFMX-ST** is not in
+  any library: `core/src/tfmxst_backend.cpp` is our own C++ port of
+  Huelsbeck's ST replay routine (from the 68000 source in UADE's Wanted
+  Team TFMX ST player) driving AtariAudio's YM2149 emulation; scopes A/B/C.
+  Both take the mdat./smpl. file pair (also x.mdat/x.smpl, x.tfx/x.sam);
+  the core reads the samples file next to the music file. TFMX-ST is told
+  apart from Amiga TFMX by YM macro commands ($40+), like UADE does.
+  App: mdat.* (and .tfx/.mdat/.hip/.fc etc.) in pickers and library, smpl.*
+  files are skipped, TFMX/FC badges, TFMX-ST under the ST filter, Amiga
+  TFMX under MOD. Same code on Windows and Android. Tested only with our
+  own test tunes (tools/make_test_tfmx*.py); real files (Modland "TFMX",
+  "TFMX ST") are blocked in the cloud. TFMX-ST digi drums are a best guess
+  (see NOTES.md). Details: NOTES.md (2026-11-04, TFMX and TFMX-ST).
 - **Amiga MOD + Fasttracker 2 XM (0.7.0, branch claude/project-thread-cs3epz):**
   played by vendored libxmp 4.6.3 (MIT) in the core (`core/src/mod_backend.cpp`),
   same C API, so Windows and Android both get it. Paula (A500) mixer for
@@ -59,7 +78,8 @@ and the version is given whenever a build is shared.
   App: .mod/.xm (and "mod.*" names) in pickers and library, MOD filter,
   badges. Details: NOTES.md (2026-11-04, Amiga MOD and Fasttracker 2 XM).
   Stephen confirmed MOD playback works on Windows (0.7.0-test.68,
-  2026-11-04); XM not yet tried on real files. Merged to main.
+  2026-11-04), and XM too, including 8+ channel XMs and the per-channel
+  visualiser (2026-11-04). Merged to main.
 - **STIL tune info (0.6.0, branch claude/project-thread-lcoe5w):** for SID
   tunes, Now playing shows HVSC STIL.txt notes (current subtune: titles,
   artists, comments of covers; the whole tune; the composer's or group's
@@ -127,14 +147,18 @@ app/                      Flutter GUI (lib/native FFI, lib/player state, lib/ui 
 app/android/              Android project: Gradle builds libchipdeck.so from the root
                           CMakeLists; MainActivity.kt (storage, pickers), PlaybackService.kt
 core/src/mod_backend.*    .mod/.xm via libxmp (chipdeck::ModTune)
+core/src/tfmx_backend.*   Amiga TFMX / Hippel / FC via libtfmxaudiodecoder (chipdeck::TfmxTune)
+core/src/tfmxst_backend.* Atari ST TFMX-ST: own replay port + AtariAudio YM2149 (chipdeck::TfmxStTune)
 cli/main.cpp              chipdeck-cli (miniaudio output, WAV export, keys)
 tests/core_test.cpp       SID core tests, run with ctest
 tests/atari_test.cpp      SNDH/YM core tests
 tests/mod_test.cpp        MOD/XM core tests
+tests/tfmx_test.cpp       TFMX and TFMX-ST core tests
 tests/data/               chipdeck-test.sid/.sndh/.ym/.mod/.xm (our own public-domain tunes)
 tools/make_test_sid.py    regenerates the SID test tune
 tools/make_test_atari.py  regenerates the SNDH (hand-assembled 68000) and YM test tunes
 tools/make_test_mod.py    regenerates the MOD test tune (make_test_xm.py: the XM)
+tools/make_test_tfmx.py   regenerates mdat./smpl.chipdeck-test (make_test_tfmxst.py: the TFMX-ST pair)
 third_party/              vendored libsidplayfp, libresidfp, AtariAudio, libxmp, miniaudio + CMake build
 cmake/                    toolchain file for MinGW cross-compile
 .github/workflows/        CI: Windows (MSVC) + Linux
@@ -383,8 +407,13 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
-0. MOD/XM (0.7.0): MOD confirmed on Windows. Still to try: real XM files
-   (Stephen will later), 8-channel MOD, PowerPacked mod, the Ayn Thor.
+00. TFMX / TFMX-ST (0.8.0): Stephen tries real files on Windows: Amiga
+   TFMX (e.g. Turrican 2, a 7V tune), and TFMX-ST pairs from Modland's
+   "TFMX ST" folder (mdat.* + smpl.*). Listen especially for TFMX-ST digi
+   drums (rate and length are guesses) and envelope (buzz) sounds. Then the
+   Ayn Thor (APK).
+0. MOD/XM (0.7.0): MOD and XM confirmed on Windows. Still to try:
+   PowerPacked mod, the Ayn Thor.
    Then: maybe .s3m/.it/.med, seeking, showing instrument names per channel.
 
 1. Stephen confirmed the Windows app and the library/search work (2026-11-04:

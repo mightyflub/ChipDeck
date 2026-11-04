@@ -6,6 +6,7 @@
 | libresidfp (reSIDfp) | 1.2.3 | GPL-2.0-or-later | release tarball from https://github.com/libsidplayfp/libresidfp/releases/tag/v1.2.3 |
 | AtariAudio | 1.27 | MIT (includes Musashi 68000 core, MIT-style; ICE depacker, public domain; LZH depacker; timedb song lengths from the sc68 project) | `git archive 1.27 src LICENSE README.md` of https://github.com/arnaud-carre/AtariAudio |
 | libxmp | 4.6.3 | MIT | `src/` (minus `bitrot/` and `lite/`), `include/`, `cmake/libxmp-sources.cmake`, README, docs/COPYING of tag libxmp-4.6.3 at https://github.com/libxmp/libxmp |
+| libtfmxaudiodecoder | 1.0.14 (master 93b99ec, 2026-11-02) | GPL-2.0-or-later | `src/` (minus `Makefile.am`, `Config.h.in`), COPYING, README.md, NEWS.md, TFMX.md of https://github.com/mschwendt/libtfmxaudiodecoder; `src/Config.h` is ours |
 | miniaudio | 0.11.26 | Public domain / MIT-0 | https://github.com/mackron/miniaudio/tree/0.11.26 |
 
 Why vendored release tarballs instead of git submodules: the tarballs ship the
@@ -36,6 +37,22 @@ upgrade (`grep -rn "ChipDeck patch" third_party`):
   output tap (`xmp_chipdeck_set_tap`, `xmp_chipdeck_read_tap`). The
   softmixer copies the mix buffer before each voice and credits the
   difference to the voice's tracker channel.
+
+- libtfmxaudiodecoder `src/LamePaulaMixer.h/.cpp`, `tfmxaudiodecoder.h/.cpp`:
+  a per-voice output tap for the scopes (`tfmxdec_chipdeck_set_tap`),
+  including the four virtual voices of TFMX 7V.
+- libtfmxaudiodecoder `src/ChipDeckFile.h` (new), `DecoderProxy.cpp`,
+  `Chris/SamplesFile.cpp`, `Chris/DNS/DNSDecoder.cpp`: open files by UTF-8
+  path (wide-char API on Windows), so names with accents work.
+- libtfmxaudiodecoder `DecoderProxy.cpp`: fix a decoder object leaked by
+  every format probe (`maybeOurs`).
+
+TFMX-ST (Atari ST TFMX) is not in any library: `core/src/tfmxst_backend.cpp`
+is ChipDeck's own C++ port of Chris Huelsbeck's ST replay routine, made from
+the commented 68000 source in Wanted Team's TFMX ST EaglePlayer as shipped
+with UADE (https://gitlab.com/uade-music-player/uade,
+`amigasrc/players/wanted_team/TFMX_ST/TFMX ST_v1.asm`). It drives
+AtariAudio's YM2149 emulation (`Ym2149c`).
 
 AtariAudio is unchanged (its `AudioRenderWithVisualInfos` is enough).
 

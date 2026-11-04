@@ -25,18 +25,18 @@ add_subdirectory(third_party)
 
 # ------------------------------------------------------------ chipdeck-core
 add_library(chipdeck-core STATIC core/src/chipdeck.cpp core/src/atari_backend.cpp
-                          core/src/mod_backend.cpp)
+                          core/src/mod_backend.cpp core/src/tfmx_backend.cpp core/src/tfmxst_backend.cpp)
 target_include_directories(chipdeck-core PUBLIC core/include)
 target_compile_definitions(chipdeck-core PRIVATE CHIPDECK_VERSION="${PROJECT_VERSION}")
-target_link_libraries(chipdeck-core PRIVATE sidplayfp atariaudio xmp)
+target_link_libraries(chipdeck-core PRIVATE sidplayfp atariaudio xmp tfmxdec)
 
 # ---------------------------------------------------- chipdeck shared library
 # Core + audio output as one DLL/.so for the Flutter app (dart:ffi) and Android.
 option(CHIPDECK_BUILD_SHARED "Build the chipdeck shared library" ON)
 if(CHIPDECK_BUILD_SHARED)
-  set_target_properties(residfp sidplayfp miniaudio atariaudio xmp PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  set_target_properties(residfp sidplayfp miniaudio atariaudio xmp tfmxdec PROPERTIES POSITION_INDEPENDENT_CODE ON)
   add_library(chipdeck-shared SHARED core/src/chipdeck.cpp core/src/atari_backend.cpp
-                                     core/src/mod_backend.cpp
+                                     core/src/mod_backend.cpp core/src/tfmx_backend.cpp core/src/tfmxst_backend.cpp
                                      core/src/chipdeck_audio.cpp)
   target_include_directories(chipdeck-shared PUBLIC core/include)
   target_compile_definitions(chipdeck-shared
@@ -46,7 +46,7 @@ if(CHIPDECK_BUILD_SHARED)
   # the file is chipdeck.dll / libchipdeck.so.
   set_target_properties(chipdeck-shared PROPERTIES OUTPUT_NAME chipdeck
     CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
-  target_link_libraries(chipdeck-shared PRIVATE sidplayfp atariaudio xmp miniaudio)
+  target_link_libraries(chipdeck-shared PRIVATE sidplayfp atariaudio xmp tfmxdec miniaudio)
   if(MINGW)
     target_link_options(chipdeck-shared PRIVATE -static -static-libgcc -static-libstdc++)
   endif()
@@ -76,4 +76,9 @@ if(CHIPDECK_BUILD_TESTS)
   target_compile_definitions(chipdeck-mod-tests PRIVATE
     CHIPDECK_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
   add_test(NAME mod COMMAND chipdeck-mod-tests)
+  add_executable(chipdeck-tfmx-tests tests/tfmx_test.cpp)
+  target_link_libraries(chipdeck-tfmx-tests PRIVATE chipdeck-core)
+  target_compile_definitions(chipdeck-tfmx-tests PRIVATE
+    CHIPDECK_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+  add_test(NAME tfmx COMMAND chipdeck-tfmx-tests)
 endif()

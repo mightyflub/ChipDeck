@@ -18,13 +18,24 @@ const supportedExtensions = {
   '.sndh', '.snd', '.ym', // Atari ST
   '.mod', // Amiga Protracker / Soundtracker modules
   '.xm', // Fasttracker 2 modules
+  // Chris Huelsbeck's TFMX (Amiga, and TFMX-ST on the Atari ST): the music
+  // data file; its samples file (smpl.* / .smpl / .sam) is found next to it.
+  '.mdat', '.tfx', '.tfm', '.tfmx',
+  // Jochen Hippel's TFMX and Future Composer (same library as TFMX).
+  '.hip', '.hipc', '.hip7', '.sog', '.fc', '.fc13', '.fc14', '.smod',
 };
 
+/// Amiga-style name prefixes ("mod.axelf", "mdat.turrican").
+const supportedPrefixes = ['mod.', 'mdat.', 'hip.', 'hipc.', 'hip7.', 'fc.'];
+
 /// Whether ChipDeck can play [path], judged by its name: a supported
-/// extension, or the Amiga habit of a "mod." prefix ("mod.axelf").
+/// extension, or an Amiga-style prefix ("mod.axelf", "mdat.turrican").
+/// TFMX samples files (smpl.*) are not tunes on their own and are left out.
 bool isSupportedFile(String path) {
   final name = p.basename(path).toLowerCase();
-  if (name.startsWith('mod.') && name.length > 4) return true;
+  for (final pre in supportedPrefixes) {
+    if (name.startsWith(pre) && name.length > pre.length) return true;
+  }
   return supportedExtensions.contains(p.extension(name));
 }
 

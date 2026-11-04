@@ -1,6 +1,6 @@
 /*
  * chipdeck-cli: command-line player for testing the ChipDeck core.
- * Plays C64 .sid, Atari ST .sndh / .ym and Amiga .mod files.
+ * Plays C64 .sid, Atari ST .sndh / .ym, Amiga .mod, .xm and TFMX (mdat.*) files.
  * Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
  */
 #include "chipdeck/chipdeck.h"
@@ -33,7 +33,7 @@ void usage()
 {
     std::fprintf(stderr,
         "ChipDeck CLI %s\n\n"
-        "Usage: chipdeck-cli [options] <file.sid|file.sndh|file.ym|file.mod>\n\n"
+        "Usage: chipdeck-cli [options] <file.sid|file.sndh|file.ym|file.mod|file.xm|mdat.name>\n\n"
         "Options:\n"
         "  -s, --subtune N       start at subtune N (default: tune's default)\n"
         "  -t, --time SECONDS    stop after SECONDS (default: tune length if known,\n"

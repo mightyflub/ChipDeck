@@ -183,12 +183,60 @@ if(UNIX)
   target_link_libraries(xmp PUBLIC m)
 endif()
 
+# ------------------------------------------------------- libtfmxaudiodecoder
+# Amiga TFMX (Chris Huelsbeck) and Jochen Hippel TFMX / Future Composer.
+# C++; upstream builds with autotools, this replaces it (Config.h is ours).
+set(TFMX_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libtfmxaudiodecoder/src)
+add_library(tfmxdec STATIC
+  ${TFMX_DIR}/tfmxaudiodecoder.cpp
+  ${TFMX_DIR}/Decoder.cpp
+  ${TFMX_DIR}/DecoderProxy.cpp
+  ${TFMX_DIR}/CRCLight.cpp
+  ${TFMX_DIR}/Dump.cpp
+  ${TFMX_DIR}/Filter.cpp
+  ${TFMX_DIR}/PaulaVoice.cpp
+  ${TFMX_DIR}/LamePaulaVoice.cpp
+  ${TFMX_DIR}/LamePaulaMixer.cpp
+  ${TFMX_DIR}/Chris/TFMXDecoder.cpp
+  ${TFMX_DIR}/Chris/Macro.cpp
+  ${TFMX_DIR}/Chris/Modulation.cpp
+  ${TFMX_DIR}/Chris/Pattern.cpp
+  ${TFMX_DIR}/Chris/Sequencer.cpp
+  ${TFMX_DIR}/Chris/Songs.cpp
+  ${TFMX_DIR}/Chris/ByChecksum.cpp
+  ${TFMX_DIR}/Chris/SamplesFile.cpp
+  ${TFMX_DIR}/Chris/MergedFiles.cpp
+  ${TFMX_DIR}/Chris/DNS/DNSDecoder.cpp
+  ${TFMX_DIR}/Jochen/HippelDecoder.cpp
+  ${TFMX_DIR}/Jochen/Analyze.cpp
+  ${TFMX_DIR}/Jochen/COSO.cpp
+  ${TFMX_DIR}/Jochen/Envelope.cpp
+  ${TFMX_DIR}/Jochen/FC.cpp
+  ${TFMX_DIR}/Jochen/Instrument.cpp
+  ${TFMX_DIR}/Jochen/MCMD.cpp
+  ${TFMX_DIR}/Jochen/ModPack.cpp
+  ${TFMX_DIR}/Jochen/Portamento.cpp
+  ${TFMX_DIR}/Jochen/Probe.cpp
+  ${TFMX_DIR}/Jochen/SMOD.cpp
+  ${TFMX_DIR}/Jochen/TFMX7V.cpp
+  ${TFMX_DIR}/Jochen/TFMX.cpp
+  ${TFMX_DIR}/Jochen/TraitsByChecksum.cpp
+  ${TFMX_DIR}/Jochen/Vibrato.cpp)
+target_include_directories(tfmxdec PUBLIC ${TFMX_DIR})
+target_compile_features(tfmxdec PRIVATE cxx_std_17)
 if(MSVC)
-  foreach(t residfp sidplayfp miniaudio atariaudio xmp)
+  # Upstream uses the alternative token "and"; MSVC needs <iso646.h> for it.
+  target_compile_options(tfmxdec PRIVATE /FIiso646.h)
+  # M_PI (Filter.cpp) is only defined by MSVC's <cmath> with this.
+  target_compile_definitions(tfmxdec PRIVATE _USE_MATH_DEFINES)
+endif()
+
+if(MSVC)
+  foreach(t residfp sidplayfp miniaudio atariaudio xmp tfmxdec)
     target_compile_options(${t} PRIVATE /W0 /utf-8)
   endforeach()
 else()
-  foreach(t residfp sidplayfp miniaudio atariaudio xmp)
+  foreach(t residfp sidplayfp miniaudio atariaudio xmp tfmxdec)
     target_compile_options(${t} PRIVATE -w)
   endforeach()
 endif()
