@@ -64,8 +64,8 @@ class RemoteState {
       startSubtune: i?.startSubtune ?? 0,
       volume: c.volume,
       advance: c.advanceMode.index,
-      playlistIndex: (c.currentIndex ?? -1) + 1,
-      playlistLength: c.playlist.length,
+      playlistIndex: c.listPosition,
+      playlistLength: c.listLength,
     );
   }
 

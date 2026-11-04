@@ -24,10 +24,9 @@ Future<void> main() async {
   controller.onSonglengthsChanged = () => library.rescan(full: true);
   await loadSecondScreenSetting();
   AndroidMedia.attach(controller);
+  // The library is not refreshed at startup: the user refreshes one
+  // location or all of them from the Library panel when they choose.
   runApp(ChipDeckApp(controller: controller, library: library));
-  // Pick up tunes added to the archive since last time (only new or
-  // changed files are read, so this is quick).
-  library.rescan();
 }
 
 /// Entry point for the player controls on a second screen (dual-screen

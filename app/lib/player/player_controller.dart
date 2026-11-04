@@ -102,6 +102,12 @@ class PlayerController extends ChangeNotifier {
   String? message; // transient error shown in a snackbar
   final List<PlaylistEntry> playlist = [];
   int? currentIndex;
+
+  /// Tunes played straight from the library (a folder or search results).
+  /// They are not added to the playlist: next/previous step through this
+  /// list instead. Only one of [currentIndex] and [_queueIndex] is set.
+  List<PlaylistEntry> _queue = const [];
+  int? _queueIndex;
   TuneInfo? info;
   bool playing = false;
   int positionMs = 0;
@@ -145,8 +151,17 @@ class PlayerController extends ChangeNotifier {
   String get engineVersion => _engine?.version ?? '';
   bool get hasEngine => _engine != null;
 
-  PlaylistEntry? get current =>
-      currentIndex == null ? null : playlist[currentIndex!];
+  PlaylistEntry? get current => currentIndex != null
+      ? playlist[currentIndex!]
+      : (_queueIndex != null ? _queue[_queueIndex!] : null);
+
+  /// True while playing tunes from the library rather than the playlist.
+  bool get playingFromLibrary => _queueIndex != null;
+
+  /// Position (1-based, 0 = none) and length of the list being played:
+  /// the playlist, or the library list a tune was started from.
+  int get listPosition => (currentIndex ?? _queueIndex ?? -1) + 1;
+  int get listLength => _queueIndex != null ? _queue.length : playlist.length;
 
   int? get effectiveLengthMs {
     final l = info?.lengthMs;
@@ -186,8 +201,15 @@ class PlayerController extends ChangeNotifier {
     if (stilPath != null) _loadStil(stilPath!);
     final saved = _prefs.getStringList('playlist') ?? const [];
     addFiles(saved.where((f) => File(f).existsSync()).toList(), persist: false);
+    final lastTune = _prefs.getString('lastTune');
     final last = _prefs.getInt('lastIndex');
-    if (last != null && last >= 0 && last < playlist.length) {
+    if (lastTune != null && File(lastTune).existsSync()) {
+      // Last tune came from the library: bring it back without adding it
+      // to the playlist.
+      _queue = [PlaylistEntry(lastTune)];
+      _queueIndex = 0;
+      _loadCurrent(autoplay: false);
+    } else if (last != null && last >= 0 && last < playlist.length) {
       currentIndex = last;
       _loadCurrent(autoplay: false);
     }
@@ -327,6 +349,7 @@ class PlayerController extends ChangeNotifier {
       stop();
       playlist.clear();
       currentIndex = null;
+      _clearQueue();
       info = null;
     }
     final existing = {
@@ -374,10 +397,13 @@ class PlayerController extends ChangeNotifier {
   }
 
   void clearPlaylist() {
-    stop();
     playlist.clear();
-    currentIndex = null;
-    info = null;
+    if (currentIndex != null) {
+      // Leave a tune playing from the library alone.
+      stop();
+      currentIndex = null;
+      info = null;
+    }
     _savePlaylist();
     notifyListeners();
   }
@@ -385,6 +411,11 @@ class PlayerController extends ChangeNotifier {
   void _savePlaylist() {
     _prefs.setStringList('playlist', playlist.map((e) => e.path).toList());
     if (currentIndex != null) _prefs.setInt('lastIndex', currentIndex!);
+  }
+
+  void _clearQueue() {
+    _queue = const [];
+    _queueIndex = null;
   }
 
   // Probe metadata in a background isolate, in batches, so the UI stays smooth.
@@ -410,8 +441,30 @@ class PlayerController extends ChangeNotifier {
   void playIndex(int index, {int subtune = 0}) {
     if (index < 0 || index >= playlist.length) return;
     currentIndex = index;
+    _clearQueue();
     _prefs.setInt('lastIndex', index);
+    _prefs.remove('lastTune');
     _loadCurrent(subtune: subtune, autoplay: true);
+  }
+
+  /// Plays tunes from the library without adding them to the playlist.
+  /// [items] is the list the tune was picked from (a folder or search
+  /// results), so next/previous carry on through it; [start] is the tune
+  /// to play first.
+  void playFromLibrary(List<(String, TuneInfo)> items, {int start = 0}) {
+    if (items.isEmpty) return;
+    _queue = [
+      for (final (path, tuneInfo) in items)
+        PlaylistEntry(path)..info = tuneInfo,
+    ];
+    currentIndex = null;
+    _playQueue(start.clamp(0, _queue.length - 1));
+  }
+
+  void _playQueue(int index) {
+    _queueIndex = index;
+    _prefs.setString('lastTune', _queue[index].path);
+    _loadCurrent(autoplay: true);
   }
 
   void _loadCurrent({int subtune = 0, required bool autoplay}) {
@@ -484,17 +537,21 @@ class PlayerController extends ChangeNotifier {
   }
 
   void nextTrack() {
-    if (playlist.isEmpty) return;
-    if (shuffle && playlist.length > 1) {
+    final fromLibrary = _queueIndex != null;
+    final length = fromLibrary ? _queue.length : playlist.length;
+    final at = fromLibrary ? _queueIndex : currentIndex;
+    final go = fromLibrary ? _playQueue : playIndex;
+    if (length == 0) return;
+    if (shuffle && length > 1) {
       final now = DateTime.now().microsecondsSinceEpoch;
-      var n = now % playlist.length;
-      if (n == currentIndex) n = (n + 1) % playlist.length;
-      playIndex(n);
+      var n = now % length;
+      if (n == at) n = (n + 1) % length;
+      go(n);
       return;
     }
-    final next = (currentIndex ?? -1) + 1;
-    if (next < playlist.length) {
-      playIndex(next);
+    final next = (at ?? -1) + 1;
+    if (next < length) {
+      go(next);
     } else {
       stop();
     }
@@ -503,6 +560,10 @@ class PlayerController extends ChangeNotifier {
   void previousTrack() {
     if (positionMs > 3000 && info != null) {
       selectSubtune(info!.currentSubtune); // restart
+      return;
+    }
+    if (_queueIndex != null) {
+      if (_queueIndex! > 0) _playQueue(_queueIndex! - 1);
       return;
     }
     final prev = (currentIndex ?? 0) - 1;

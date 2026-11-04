@@ -155,6 +155,12 @@ class LibraryController extends ChangeNotifier {
   final Map<String, LibraryFolder> _folders = {};
   ScanProgress? scan; // non-null while indexing
   DateTime? lastScan;
+
+  /// When each location was last refreshed.
+  final Map<String, DateTime> rootScans = {};
+
+  /// Locations being refreshed right now (empty when idle).
+  List<String> scanningRoots = const [];
   String? message;
 
   /// Called when a location contains an HVSC Songlengths.md5 file.
@@ -188,6 +194,16 @@ class LibraryController extends ChangeNotifier {
       ];
       final ls = data['lastScan'];
       if (ls is int) lastScan = DateTime.fromMillisecondsSinceEpoch(ls);
+      final rs = data['rootScans'];
+      if (rs is Map) {
+        for (final e in rs.entries) {
+          if (e.value is int) {
+            rootScans[e.key as String] = DateTime.fromMillisecondsSinceEpoch(
+              e.value as int,
+            );
+          }
+        }
+      }
       _rebuildFolders();
     } catch (e) {
       debugPrint('library load failed: $e');
@@ -199,6 +215,10 @@ class LibraryController extends ChangeNotifier {
       'version': 1,
       'roots': roots,
       'lastScan': lastScan?.millisecondsSinceEpoch,
+      'rootScans': {
+        for (final e in rootScans.entries)
+          e.key: e.value.millisecondsSinceEpoch,
+      },
       'tracks': [for (final t in tracks) t.toJson()],
     });
     await _file.parent.create(recursive: true);
@@ -217,6 +237,7 @@ class LibraryController extends ChangeNotifier {
     }
     // A new root may contain existing roots; fold them in.
     roots.removeWhere((r) => p.isWithin(norm, r));
+    rootScans.removeWhere((r, _) => p.isWithin(norm, r));
     roots.add(norm);
     roots.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     _detectSonglengths(norm);
@@ -225,11 +246,13 @@ class LibraryController extends ChangeNotifier {
       if (stil != null) onStilFound?.call(stil);
     }
     notifyListeners();
-    await rescan();
+    // Only the new location needs reading; the others are left as they are.
+    await rescan(only: [norm]);
   }
 
   Future<void> removeRoot(String dir) async {
     roots.remove(dir);
+    rootScans.remove(dir);
     tracks = tracks.where((t) => !p.isWithin(dir, t.path)).toList();
     _rebuildFolders();
     notifyListeners();
@@ -252,20 +275,39 @@ class LibraryController extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------- indexing
-  /// Rescans all locations. [full] re-reads every file (e.g. after adding a
-  /// Songlengths database), otherwise unchanged files are skipped.
-  Future<void> rescan({bool full = false}) async {
-    if (isScanning || roots.isEmpty) return;
-    scan = const ScanProgress(0, 0, 'Looking for tunes…');
+  /// Refreshes the index. The library is never refreshed on its own (not
+  /// even at startup): this runs when the user asks, when a location is
+  /// added, or after a new Songlengths file.
+  ///
+  /// [only] limits the refresh to those locations (default: all of them);
+  /// tunes in other locations are left untouched. [full] re-reads every file
+  /// (e.g. after adding a Songlengths database), otherwise unchanged files
+  /// are skipped.
+  Future<void> rescan({bool full = false, List<String>? only}) async {
+    final targets = [
+      for (final r in only ?? roots)
+        if (roots.contains(r)) r,
+    ];
+    if (isScanning || targets.isEmpty) return;
+    scanningRoots = targets;
+    scan = ScanProgress(
+      0,
+      0,
+      targets.length == 1 && roots.length > 1
+          ? 'Looking for tunes in ${p.basename(targets.first)}…'
+          : 'Looking for tunes…',
+    );
     notifyListeners();
 
+    bool inTargets(String path) => targets.any((r) => p.isWithin(r, path));
     final known = <String, List<Object>>{
-      for (final t in tracks) t.path: t.toJson(),
+      for (final t in tracks)
+        if (inTargets(t.path)) t.path: t.toJson(),
     };
     final port = ReceivePort();
     final args = _ScanArgs(
       port.sendPort,
-      List.of(roots),
+      targets,
       known,
       full,
       songlengthsPath?.call(),
@@ -283,15 +325,30 @@ class LibraryController extends ChangeNotifier {
         scan = ScanProgress(msg[1] as int, msg[2] as int, 'Indexing');
         notifyListeners();
       } else if (msg is List && msg.isNotEmpty && msg[0] == 'done') {
-        tracks = [
+        final fresh = [
           for (final t in msg[1] as List) LibraryTrack.fromJson(t as List),
         ];
+        tracks = [
+          for (final t in tracks)
+            if (!inTargets(t.path)) t,
+          ...fresh,
+        ];
         final added = msg[2] as int;
-        lastScan = DateTime.now();
+        final now = DateTime.now();
+        lastScan = now;
+        for (final r in targets) {
+          rootScans[r] = now;
+        }
         _rebuildFolders();
+        final what = targets.length == 1 && roots.length > 1
+            ? p.basename(targets.first)
+            : 'Library';
+        final count = targets.length == roots.length
+            ? tracks.length
+            : fresh.length;
         message = added > 0
-            ? 'Library updated: ${tracks.length} tunes ($added new or changed).'
-            : 'Library is up to date: ${tracks.length} tunes.';
+            ? '$what updated: $count tunes ($added new or changed).'
+            : '$what is up to date: $count tunes.';
         port.close();
         done.complete();
       } else if (msg is List) {
@@ -303,6 +360,7 @@ class LibraryController extends ChangeNotifier {
     });
     await done.future;
     scan = null;
+    scanningRoots = const [];
     notifyListeners();
     await _save();
   }
