@@ -1,4 +1,6 @@
 // Settings: SID model, Songlengths database, default length, about.
+import '../version.dart';
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -30,7 +32,16 @@ class SettingsDialog extends StatelessWidget {
         final c = controller;
         return AlertDialog(
           backgroundColor: Palette.panel,
-          title: const Text('Settings'),
+          title: Row(
+            children: [
+              const Text('Settings'),
+              const Spacer(),
+              Text(
+                'ChipDeck $appVersion',
+                style: const TextStyle(color: Palette.textMuted, fontSize: 12),
+              ),
+            ],
+          ),
           content: SizedBox(
             width: 480,
             child: SingleChildScrollView(
@@ -164,6 +175,7 @@ class SettingsDialog extends StatelessWidget {
               onPressed: () => showLicensePage(
                 context: context,
                 applicationName: 'ChipDeck',
+                applicationVersion: appVersion,
               ),
               child: const Text('Licenses'),
             ),

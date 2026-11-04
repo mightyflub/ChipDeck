@@ -64,18 +64,22 @@ jobs:
         run: |
           flutter pub get
           flutter analyze
+      - name: Version
+        shell: bash
+        run: tools/ci-version.sh
       - name: Build Windows app
         working-directory: app
-        run: flutter build windows --release
+        shell: bash
+        run: flutter build windows --release --build-name=$CHIPDECK_VERSION --build-number=$CHIPDECK_BUILD --dart-define=CHIPDECK_VERSION=$CHIPDECK_VERSION
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item -Recurse app\build\windows\x64\runner\Release dist\ChipDeck
-          Copy-Item LICENSE dist\ChipDeck\LICENSE.txt
+          Copy-Item -Recurse app\build\windows\x64\runner\Release dist\ChipDeck-$env:CHIPDECK_VERSION
+          Copy-Item LICENSE dist\ChipDeck-$env:CHIPDECK_VERSION\LICENSE.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: chipdeck-app-windows-x64
+          name: chipdeck-app-windows-x64-${{ env.CHIPDECK_VERSION }}
           path: dist/
 
   app-linux:
@@ -88,12 +92,15 @@ jobs:
         with:
           channel: stable
           flutter-version: 3.47.9
+      - name: Version
+        shell: bash
+        run: tools/ci-version.sh
       - name: Analyze and build
         working-directory: app
         run: |
           flutter pub get
           flutter analyze
-          flutter build linux --release
+          flutter build linux --release --build-name=$CHIPDECK_VERSION --build-number=$CHIPDECK_BUILD --dart-define=CHIPDECK_VERSION=$CHIPDECK_VERSION
 
   # Quick check (seconds) that the Android signing secrets reach CI and
   # unlock the keystore, without waiting for the full APK build.
@@ -151,21 +158,26 @@ jobs:
             echo "keyAlias=chipdeck"
             echo "keyPassword=$KEYSTORE_PASSWORD"
           } > key.properties
+      - name: Version
+        shell: bash
+        run: tools/ci-version.sh
       - name: Build APK
         working-directory: app
         # One APK for all phones (arm64, 32-bit arm, x86_64). The build
         # number grows with every CI run so each APK installs as an update.
-        run: flutter build apk --release --build-number=${{ github.run_number }}
+        run: flutter build apk --release --build-name=$CHIPDECK_VERSION --build-number=$CHIPDECK_BUILD --dart-define=CHIPDECK_VERSION=$CHIPDECK_VERSION
       - name: Package
         run: |
           mkdir -p dist
-          cp app/build/app/outputs/flutter-apk/app-release.apk dist/ChipDeck.apk
+          APK="dist/ChipDeck-$CHIPDECK_VERSION.apk"
+          cp app/build/app/outputs/flutter-apk/app-release.apk "$APK"
           cp LICENSE dist/LICENSE.txt
-          unzip -l dist/ChipDeck.apk | grep libchipdeck.so
-          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
-          "$APKSIGNER" verify --print-certs dist/ChipDeck.apk | grep -i "subject" | head -1 || true
+          unzip -l "$APK" | grep libchipdeck.so
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$BT/aapt2" dump badging "$APK" | grep -o "versionCode='[^']*' versionName='[^']*'" || true
+          "$BT/apksigner" verify --print-certs "$APK" | grep -i "subject" | head -1 || true
           rm -f app/android/release.jks app/android/key.properties
       - uses: actions/upload-artifact@v4
         with:
-          name: chipdeck-app-android
+          name: chipdeck-app-android-${{ env.CHIPDECK_VERSION }}
           path: dist/
