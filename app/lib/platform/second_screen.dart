@@ -4,6 +4,7 @@
 // and applies their actions. Android only; nothing happens elsewhere.
 // Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../player/player_controller.dart';
@@ -28,6 +29,11 @@ Future<void> setSecondScreenEnabled(bool on) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool(_prefKey, on);
 }
+
+/// Brings the controls back in front on the second screen (after another
+/// app there covered them).
+Future<void> raiseSecondScreen() =>
+    const MethodChannel('chipdeck/android').invokeMethod('raiseSecondScreen');
 
 /// Builds the state message for the controls screen.
 Map<String, Object?> remoteStateOf(PlayerController c) =>

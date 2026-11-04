@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.WindowManager
@@ -34,6 +35,7 @@ class SecondScreen(
     private var channel: MethodChannel? = null
     private var presentation: ControlsPresentation? = null
     private var started = false
+    private var shownAt = 0L
 
     /** The user's setting ("Controls on second screen"). */
     var enabled = true
@@ -54,9 +56,29 @@ class SecondScreen(
         started = false
         displays.unregisterDisplayListener(this)
         hide()
+    }
+
+    /** Frees the controls' engine (when the activity goes away). */
+    fun release() {
+        stop()
         engine?.destroy()
         engine = null
         channel = null
+    }
+
+    /** Whether the controls are showing on another display right now. */
+    val showing: Boolean get() = presentation != null
+
+    /**
+     * Puts the controls back in front on the other display, after another
+     * app opened there covered them.
+     */
+    fun raise() {
+        if (!started || presentation == null) return
+        // Not right after showing them (start also counts as coming back).
+        if (SystemClock.uptimeMillis() - shownAt < 1000) return
+        hide()
+        refresh()
     }
 
     /** Player state from the main engine, for the controls. */
@@ -87,7 +109,11 @@ class SecondScreen(
 
     private fun refresh() {
         if (!started) return
-        val target = if (enabled) targetDisplay() else null
+        // Only when ChipDeck itself is on the main display: if Android opened
+        // it on the second screen, putting the controls on the main one would
+        // swap the screens round.
+        val onMain = ownDisplayId() == Display.DEFAULT_DISPLAY
+        val target = if (enabled && onMain) targetDisplay() else null
         if (target == null) {
             hide()
             return
@@ -110,6 +136,7 @@ class SecondScreen(
             return
         }
         presentation = p
+        shownAt = SystemClock.uptimeMillis()
         e.lifecycleChannel.appIsResumed()
         main.invokeMethod("secondScreen", true)
     }
@@ -152,6 +179,9 @@ class SecondScreen(
 
         override fun onCreate(savedInstanceState: Bundle?) {
             super.onCreate(savedInstanceState)
+            // Touch still works; keys (the handheld's buttons) and focus stay
+            // with ChipDeck on the main screen.
+            window?.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
             val v = FlutterView(context)
             setContentView(v)
             v.attachToFlutterEngine(engine)

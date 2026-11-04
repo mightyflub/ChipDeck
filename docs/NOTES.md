@@ -277,3 +277,34 @@ Untested on hardware: the Thor may not report its bottom screen as a
 presentation display, which is why any non-own display is used as a
 fallback. A setting turns it off.
 
+First try on the Ayn Thor: the controls appeared on the bottom screen but
+said "Nothing playing", and the top screen kept its own transport. Cause:
+Android puts the controls up while the main Dart code is still starting
+(loading the player and library), so the "secondScreen" message arrived
+before Dart listened. Flutter keeps only one unheard message per channel,
+and the controls' "ready" pushed it out. Dart now asks
+"secondScreenShowing" once it listens.
+
+Second try (0.4.0-test.52): the controls work, but going to the background
+or closing ChipDeck changed only one screen, and Android could then reopen
+ChipDeck on the bottom screen with the controls on top, with no way to get
+both back. Now the controls come down when the activity stops and go up
+again when it starts, only when ChipDeck is on the main display, and their
+window is not focusable (touch still works).
+
+Third try (0.4.0-test.54): better, but the bottom screen "tends to lose
+focus" with no easy way back (most likely another app or the launcher
+covering the controls there). Added a button on the main screen that puts
+the controls back in front, and ChipDeck now does that by itself when it
+becomes the top app again (onTopResumedActivityChanged, Android 10+).
+
+## 2026-11-04: Version numbers
+
+Stephen asked for version numbers on every build, test builds included.
+Base version in pubspec (now 0.4.0: CLI, Windows app, library, Android
+were the first four milestones); CI adds `-test.<run>` unless the build is
+from a matching `v` tag. Shown in Settings and in artifact and APK names.
+He then said a Windows test build isn't needed every time: the Windows
+app now builds only on main, tags and on request, and branch pushes no
+longer make a second run next to the pull request's.
+

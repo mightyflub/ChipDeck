@@ -29,11 +29,30 @@ only inside `lib/platform/`.
 - Windows only: keyboard shortcuts (harmless on Android; work with a
   Bluetooth keyboard).
 
+## Version numbers and CI builds
+
+Stephen's rule (2026-11-04): every build has a version, test builds too,
+shown in the app (Settings title, Licenses page) and in the artifact name,
+and the version is given whenever a build is shared.
+
+- The base version is `version:` in `app/pubspec.yaml` (MAJOR.MINOR.PATCH;
+  the `+N` there is ignored by CI). Bump it when a release goes out.
+- CI (`tools/ci-version.sh`) makes `0.4.0-test.<run number>` for every
+  build, and `0.4.0` for a `v0.4.0` tag (the tag must match pubspec). The
+  run number is also the Android versionCode and the Windows build number,
+  so every APK installs over the previous one.
+- Builds made by hand without `--dart-define=CHIPDECK_VERSION=...` show
+  "dev".
+- CI runs on pull requests (test APKs come from these runs), on main and
+  on v* tags. The Windows app (Stephen, 2026-11-04: not needed for every
+  test build) builds only on main, tags, or a manual "Run workflow" with
+  "windows" ticked. Pushes to other branches without a PR build nothing.
+
 ## Current state (2026-11-04)
 
 - **Android app (branch claude/project-thread-ryqtet, PR #3):** same Flutter
   app and core as Windows, built as an APK in CI (`app-android` job,
-  artifact `chipdeck-app-android` containing `ChipDeck.apk`). Not yet tried
+  artifact `chipdeck-app-android-<version>` containing `ChipDeck-<version>.apk`). Not yet tried
   on a phone. See "The Android app" below.
 
 - **Milestone 1 done, confirmed working on Stephen's Windows PC:** a
@@ -41,7 +60,7 @@ only inside `lib/platform/`.
   speakers or renders them to WAV.
 - **Milestone 2 in progress: Flutter GUI (`app/`).** Builds and runs on
   Linux (screenshots in `docs/screenshots/`). Windows build runs in CI
-  (`app-windows` job, artifact `chipdeck-app-windows-x64`); waiting for
+  (`app-windows` job, artifact `chipdeck-app-windows-x64-<version>`); waiting for
   Stephen to try it. Stephen asked for an "attractive but functional"
   interface.
 - `chipdeck-core` has a plain C API (`core/include/chipdeck/chipdeck.h`)
@@ -197,7 +216,12 @@ transport and subtune buttons. The controls are a second Flutter engine
 by `SecondScreen.kt`; state and actions go through MainActivity
 (`controlsState` / `controlsAction`, see `lib/platform/remote_controls.dart`
 and `android_media.dart`). Setting: "Controls on second screen" (on by
-default). Not yet tried on a real dual-screen device.
+default). The controls show only while ChipDeck is in the foreground and
+on the main display (in the background the notification has the controls),
+and their window never takes key focus, so the handheld's buttons stay with
+the main screen. If another app covers the controls,
+they come back when ChipDeck becomes the top app again, or with the
+split-screen button in the rail (or title bar). Working on the Ayn Thor since 0.4.0-test.52.
 
 App features: playlist (files or whole folders, searchable, remembered
 between runs), now playing (title, author, released, PSID/RSID, 6581/8580,
@@ -209,8 +233,8 @@ Keys: Space play/pause, Left/Right subtune, N/P tune, +/- volume.
 
 ### The Android app
 
-Easiest: download `chipdeck-app-android` from the latest GitHub Actions run
-(Actions tab, newest "build" run, Artifacts), unzip, copy `ChipDeck.apk` to
+Easiest: download `chipdeck-app-android-<version>` from the latest GitHub Actions run
+(Actions tab, newest "build" run, Artifacts), unzip, copy `ChipDeck-<version>.apk` to
 the phone and open it (allow "install unknown apps" for the file manager or
 browser). On first use of "Add location" / "Add files" ChipDeck explains and
 opens Android's "All files access" screen; switch it on and come back.
