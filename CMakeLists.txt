@@ -29,16 +29,18 @@ target_link_libraries(chipdeck-core PRIVATE sidplayfp)
 option(CHIPDECK_BUILD_SHARED "Build the chipdeck shared library" ON)
 if(CHIPDECK_BUILD_SHARED)
   set_target_properties(residfp sidplayfp miniaudio PROPERTIES POSITION_INDEPENDENT_CODE ON)
-  add_library(chipdeck SHARED core/src/chipdeck.cpp core/src/chipdeck_audio.cpp)
-  target_include_directories(chipdeck PUBLIC core/include)
-  target_compile_definitions(chipdeck
+  add_library(chipdeck-shared SHARED core/src/chipdeck.cpp core/src/chipdeck_audio.cpp)
+  target_include_directories(chipdeck-shared PUBLIC core/include)
+  target_compile_definitions(chipdeck-shared
     PUBLIC CHIPDECK_SHARED
     PRIVATE CHIPDECK_VERSION="${PROJECT_VERSION}")
-  set_target_properties(chipdeck PROPERTIES
+  # Target is chipdeck-shared (the Flutter app's executable is called chipdeck);
+  # the file is chipdeck.dll / libchipdeck.so.
+  set_target_properties(chipdeck-shared PROPERTIES OUTPUT_NAME chipdeck
     CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
-  target_link_libraries(chipdeck PRIVATE sidplayfp miniaudio)
+  target_link_libraries(chipdeck-shared PRIVATE sidplayfp miniaudio)
   if(MINGW)
-    target_link_options(chipdeck PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(chipdeck-shared PRIVATE -static -static-libgcc -static-libstdc++)
   endif()
 endif()
 
