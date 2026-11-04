@@ -24,7 +24,8 @@ class _VoiceState {
   bool gate = false;
 }
 
-class _VisualizerState extends State<Visualizer> with SingleTickerProviderStateMixin {
+class _VisualizerState extends State<Visualizer>
+    with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_onTick);
   Int16List _samples = Int16List(0);
   List<_VoiceState> _voices = List.generate(3, (_) => _VoiceState());
@@ -45,7 +46,8 @@ class _VisualizerState extends State<Visualizer> with SingleTickerProviderStateM
     final c = widget.controller;
     if (!c.playing) {
       // Let meters fall to rest, then stop repainting.
-      final busy = _voices.any((v) => v.level > 0.01) || _samples.any((s) => s != 0);
+      final busy =
+          _voices.any((v) => v.level > 0.01) || _samples.any((s) => s != 0);
       if (!busy) return;
       setState(() {
         for (final v in _voices) {
@@ -78,7 +80,20 @@ class _VisualizerState extends State<Visualizer> with SingleTickerProviderStateM
     setState(() => _samples = c.scope(1536));
   }
 
-  static const _noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  static const _noteNames = [
+    'C',
+    'C#',
+    'D',
+    'D#',
+    'E',
+    'F',
+    'F#',
+    'G',
+    'G#',
+    'A',
+    'A#',
+    'B',
+  ];
 
   void _decodeVoice(Uint8List regs, int v, double clock, _VoiceState s) {
     final b = v * 7;
@@ -101,37 +116,53 @@ class _VisualizerState extends State<Visualizer> with SingleTickerProviderStateM
       s.note = '';
     }
     final target = (s.gate && waves.isNotEmpty) ? math.max(sustain, 0.25) : 0.0;
-    s.level = target > s.level ? s.level + (target - s.level) * 0.5 : s.level * 0.9;
+    s.level = target > s.level
+        ? s.level + (target - s.level) * 0.5
+        : s.level * 0.9;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      Container(
-        height: widget.height,
-        decoration: BoxDecoration(
-          color: const Color(0xFF080912),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Palette.border),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: CustomPaint(
-            painter: _ScopePainter(_samples),
-            size: Size.infinite,
+    return Column(
+      children: [
+        Container(
+          height: widget.height,
+          decoration: BoxDecoration(
+            color: const Color(0xFF080912),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Palette.border),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: CustomPaint(
+              painter: _ScopePainter(_samples),
+              size: Size.infinite,
+            ),
           ),
         ),
-      ),
-      if (_voices.isNotEmpty) const SizedBox(height: 12),
-      if (_voices.isNotEmpty) LayoutBuilder(builder: (context, box) {
-        final perRow = box.maxWidth < 420 ? 3 : _voices.length.clamp(3, 9);
-        final w = (box.maxWidth - (perRow - 1) * 8) / perRow;
-        return Wrap(spacing: 8, runSpacing: 8, children: [
-          for (var i = 0; i < _voices.length; i++)
-            SizedBox(width: w, child: _VoiceTile(index: i, state: _voices[i])),
-        ]);
-      }),
-    ]);
+        if (_voices.isNotEmpty) const SizedBox(height: 12),
+        if (_voices.isNotEmpty)
+          LayoutBuilder(
+            builder: (context, box) {
+              final perRow = box.maxWidth < 420
+                  ? 3
+                  : _voices.length.clamp(3, 9);
+              final w = (box.maxWidth - (perRow - 1) * 8) / perRow;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (var i = 0; i < _voices.length; i++)
+                    SizedBox(
+                      width: w,
+                      child: _VoiceTile(index: i, state: _voices[i]),
+                    ),
+                ],
+              );
+            },
+          ),
+      ],
+    );
   }
 }
 
@@ -148,42 +179,70 @@ class _VoiceTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: Palette.panel,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: state.gate ? col.withValues(alpha: 0.6) : Palette.border),
+        border: Border.all(
+          color: state.gate ? col.withValues(alpha: 0.6) : Palette.border,
+        ),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: state.gate ? col : Palette.border,
-              boxShadow: state.gate ? [BoxShadow(color: col, blurRadius: 6)] : null,
-            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: state.gate ? col : Palette.border,
+                  boxShadow: state.gate
+                      ? [BoxShadow(color: col, blurRadius: 6)]
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'V${index + 1}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Palette.textMuted,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                state.note,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: col,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: tabular,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Text('V${index + 1}',
-              style: const TextStyle(fontSize: 11, color: Palette.textMuted, fontWeight: FontWeight.w700)),
-          const Spacer(),
-          Text(state.note,
-              style: TextStyle(fontSize: 12, color: col, fontWeight: FontWeight.w700, fontFeatures: tabular)),
-        ]),
-        const SizedBox(height: 4),
-        Text(state.wave,
+          const SizedBox(height: 4),
+          Text(
+            state.wave,
             maxLines: 1,
             overflow: TextOverflow.clip,
-            style: const TextStyle(fontSize: 11, color: Palette.textMuted, letterSpacing: 0.6)),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: LinearProgressIndicator(
-            value: state.level.clamp(0, 1),
-            minHeight: 5,
-            backgroundColor: Palette.panelHigh,
-            valueColor: AlwaysStoppedAnimation(col),
+            style: const TextStyle(
+              fontSize: 11,
+              color: Palette.textMuted,
+              letterSpacing: 0.6,
+            ),
           ),
-        ),
-      ]),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: state.level.clamp(0, 1),
+              minHeight: 5,
+              backgroundColor: Palette.panelHigh,
+              valueColor: AlwaysStoppedAnimation(col),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -225,7 +284,10 @@ class _ScopePainter extends CustomPainter {
       final scaleY = size.height * 0.45 / 32768.0 * 2.2; // a little gain
       for (var i = 0; i < window; i++) {
         final x = size.width * i / (window - 1);
-        final y = (mid - samples[start + i] * scaleY).clamp(2.0, size.height - 2);
+        final y = (mid - samples[start + i] * scaleY).clamp(
+          2.0,
+          size.height - 2,
+        );
         if (i == 0) {
           path.moveTo(x, y);
         } else {

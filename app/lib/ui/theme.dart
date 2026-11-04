@@ -10,20 +10,25 @@ class Palette {
   static const scope = Color(0xFF5CE1E6); // phosphor cyan
   static const warm = Color(0xFFFFB86B);
   static const textMuted = Color(0xFF9AA0C3);
-  static const voice = [Color(0xFF8E7CFF), Color(0xFF5CE1E6), Color(0xFFFF7AB6)];
+  static const voice = [
+    Color(0xFF8E7CFF),
+    Color(0xFF5CE1E6),
+    Color(0xFFFF7AB6),
+  ];
 }
 
 ThemeData buildTheme() {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: Palette.accent,
-    brightness: Brightness.dark,
-  ).copyWith(
-    primary: Palette.accent,
-    secondary: Palette.scope,
-    surface: Palette.panel,
-    surfaceContainerHighest: Palette.panelHigh,
-    outlineVariant: Palette.border,
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: Palette.accent,
+        brightness: Brightness.dark,
+      ).copyWith(
+        primary: Palette.accent,
+        secondary: Palette.scope,
+        surface: Palette.panel,
+        surfaceContainerHighest: Palette.panelHigh,
+        outlineVariant: Palette.border,
+      );
   final base = ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
@@ -40,7 +45,9 @@ ThemeData buildTheme() {
       thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
       overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
     ),
-    tooltipTheme: const TooltipThemeData(waitDuration: Duration(milliseconds: 500)),
+    tooltipTheme: const TooltipThemeData(
+      waitDuration: Duration(milliseconds: 500),
+    ),
     dividerTheme: const DividerThemeData(color: Palette.border, thickness: 1),
     listTileTheme: const ListTileThemeData(dense: true),
   );

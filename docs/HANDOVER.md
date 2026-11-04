@@ -135,6 +135,17 @@ On Linux: `sudo apt install ninja-build libgtk-3-dev clang`, then
 `flutter build linux --release`. The runner CMakeLists files include the
 repo root CMakeLists, so the native library is built automatically.
 
+Library (added 2026-11-04 at Stephen's request): saved music locations
+(e.g. HVSC C64Music, the SNDH archive), indexed in the background into
+`library.json` in the app support folder (Windows: %APPDATA%\io.github.mightyflub\chipdeck).
+Rescans are incremental (size + mtime), run on startup and via the refresh
+button; "Rebuild index" in Music locations re-reads everything. Folder
+browser with breadcrumbs and per-folder tune counts, play/add a whole
+folder, instant search (all words must match title, composer, released or
+folder) with a C64/Atari filter. If a location contains
+DOCUMENTS/Songlengths.md5 it is picked up automatically.
+Code: `app/lib/library/library.dart`, `app/lib/ui/library_panel.dart`.
+
 App features: playlist (files or whole folders, searchable, remembered
 between runs), now playing (title, author, released, PSID/RSID, 6581/8580,
 PAL/NTSC, 2SID/3SID), oscilloscope, per-voice activity (waveform, note,
@@ -198,7 +209,8 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
-1. Stephen tries the Windows app build and gives feedback on the UI.
+1. Stephen confirmed the Windows app works (2026-11-04). Library/search
+   added next; waiting for his feedback on it with his real archive.
    Still worth testing real HVSC tunes: an RSID digi tune and a 2SID tune.
 2. Android: add `externalNativeBuild` to `app/android/app/build.gradle.kts`
    pointing at the repo root CMakeLists (`CHIPDECK_BUILD_CLI=OFF`,

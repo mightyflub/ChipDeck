@@ -177,3 +177,23 @@ Stephen asked for "a command line player test like we did for the sid files".
 Merged the SNDH/YM thread (PR #1) into this branch. The app accepts
 .sndh/.snd/.ym, shows an "Atari ST" badge and hides the SID voice tiles
 when `sid_chips == 0` (scope only). SNDH files carry their own length.
+
+## 2026-11-04: Music library and search index
+
+Stephen: "store locations of my music archive and let me browse and search
+them ... we need that and a search index".
+
+- Index format: one JSON file (`library.json`, app support dir) with roots,
+  last scan time and a compact array per track
+  `[path, title, author, released, format, subtunes, lengthMs, size, mtime, sidChips]`.
+  Chosen over SQLite to avoid another native dependency; HVSC (~60k tunes)
+  is roughly 8-10 MB of JSON and loads in an isolate.
+- Search is an in-memory linear scan over a lowercased blob per track
+  (title, author, released, file and folder name); all words must match.
+  Fast enough for HVSC size (milliseconds). If it gets slow, add a token
+  index or move to SQLite FTS5.
+- Indexer runs in a spawned isolate, reports progress every 250 files,
+  reuses entries whose size+mtime are unchanged, and hands results back
+  with Isolate.exit (no copy).
+- Tested with a generated fake archive of 2642 files (HVSC-like folders);
+  indexed in a few seconds in the container.

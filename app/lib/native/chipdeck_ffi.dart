@@ -80,18 +80,18 @@ class TuneInfo {
   }
 
   factory TuneInfo.fromStruct(CdInfoStruct s) => TuneInfo(
-        title: _str(s.title),
-        author: _str(s.author),
-        released: _str(s.released),
-        format: _str(s.format),
-        subtunes: s.subtunes,
-        startSubtune: s.startSubtune,
-        currentSubtune: s.currentSubtune,
-        sidChips: s.sidChips,
-        sidModel: SidModel.values[s.sidModel.clamp(0, 2)],
-        isNtsc: s.isNtsc != 0,
-        lengthMs: s.lengthMs > 0 ? s.lengthMs : null,
-      );
+    title: _str(s.title),
+    author: _str(s.author),
+    released: _str(s.released),
+    format: _str(s.format),
+    subtunes: s.subtunes,
+    startSubtune: s.startSubtune,
+    currentSubtune: s.currentSubtune,
+    sidChips: s.sidChips,
+    sidModel: SidModel.values[s.sidModel.clamp(0, 2)],
+    isNtsc: s.isNtsc != 0,
+    lengthMs: s.lengthMs > 0 ? s.lengthMs : null,
+  );
 }
 
 typedef _VoidPtrFn = Pointer<Void> Function();
@@ -101,47 +101,82 @@ typedef _DestroyD = void Function(Pointer<Void>);
 /// Low-level access to the chipdeck shared library.
 class ChipDeckNative {
   ChipDeckNative._(DynamicLibrary lib)
-      : version = lib
-            .lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
-                'cd_version')()
-            .toDartString(),
-        _audioCreate = lib.lookupFunction<Pointer<Void> Function(), _VoidPtrFn>(
-            'cd_audio_create'),
-        _audioDestroy =
-            lib.lookupFunction<_DestroyN, _DestroyD>('cd_audio_destroy'),
-        _audioPlayer = lib.lookupFunction<Pointer<Void> Function(Pointer<Void>),
-            Pointer<Void> Function(Pointer<Void>)>('cd_audio_player'),
-        _audioSetPlaying = lib.lookupFunction<Void Function(Pointer<Void>, Int32),
-            void Function(Pointer<Void>, int)>('cd_audio_set_playing'),
-        _audioSetVolume = lib.lookupFunction<Void Function(Pointer<Void>, Float),
-            void Function(Pointer<Void>, double)>('cd_audio_set_volume'),
-        _audioScope = lib.lookupFunction<
+    : version = lib
+          .lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+            'cd_version',
+          )()
+          .toDartString(),
+      _audioCreate = lib.lookupFunction<Pointer<Void> Function(), _VoidPtrFn>(
+        'cd_audio_create',
+      ),
+      _audioDestroy = lib.lookupFunction<_DestroyN, _DestroyD>(
+        'cd_audio_destroy',
+      ),
+      _audioPlayer = lib
+          .lookupFunction<
+            Pointer<Void> Function(Pointer<Void>),
+            Pointer<Void> Function(Pointer<Void>)
+          >('cd_audio_player'),
+      _audioSetPlaying = lib
+          .lookupFunction<
+            Void Function(Pointer<Void>, Int32),
+            void Function(Pointer<Void>, int)
+          >('cd_audio_set_playing'),
+      _audioSetVolume = lib
+          .lookupFunction<
+            Void Function(Pointer<Void>, Float),
+            void Function(Pointer<Void>, double)
+          >('cd_audio_set_volume'),
+      _audioScope = lib
+          .lookupFunction<
             Size Function(Pointer<Void>, Pointer<Int16>, Size),
-            int Function(Pointer<Void>, Pointer<Int16>, int)>('cd_audio_scope'),
-        _lastError = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Void>),
-            Pointer<Utf8> Function(Pointer<Void>)>('cd_last_error'),
-        _loadSonglengths = lib.lookupFunction<
+            int Function(Pointer<Void>, Pointer<Int16>, int)
+          >('cd_audio_scope'),
+      _lastError = lib
+          .lookupFunction<
+            Pointer<Utf8> Function(Pointer<Void>),
+            Pointer<Utf8> Function(Pointer<Void>)
+          >('cd_last_error'),
+      _loadSonglengths = lib
+          .lookupFunction<
             Int32 Function(Pointer<Void>, Pointer<Utf8>),
-            int Function(Pointer<Void>, Pointer<Utf8>)>('cd_load_songlengths'),
-        _setSidModel = lib.lookupFunction<Void Function(Pointer<Void>, Int32),
-            void Function(Pointer<Void>, int)>('cd_set_sid_model'),
-        _loadFile = lib.lookupFunction<
+            int Function(Pointer<Void>, Pointer<Utf8>)
+          >('cd_load_songlengths'),
+      _setSidModel = lib
+          .lookupFunction<
+            Void Function(Pointer<Void>, Int32),
+            void Function(Pointer<Void>, int)
+          >('cd_set_sid_model'),
+      _loadFile = lib
+          .lookupFunction<
             Int32 Function(Pointer<Void>, Pointer<Utf8>, Int32),
-            int Function(Pointer<Void>, Pointer<Utf8>, int)>('cd_load_file'),
-        _selectSubtune = lib.lookupFunction<Int32 Function(Pointer<Void>, Int32),
-            int Function(Pointer<Void>, int)>('cd_select_subtune'),
-        _getInfo = lib.lookupFunction<
+            int Function(Pointer<Void>, Pointer<Utf8>, int)
+          >('cd_load_file'),
+      _selectSubtune = lib
+          .lookupFunction<
+            Int32 Function(Pointer<Void>, Int32),
+            int Function(Pointer<Void>, int)
+          >('cd_select_subtune'),
+      _getInfo = lib
+          .lookupFunction<
             Int32 Function(Pointer<Void>, Pointer<CdInfoStruct>),
-            int Function(Pointer<Void>, Pointer<CdInfoStruct>)>('cd_get_info'),
-        _positionMs = lib.lookupFunction<Uint32 Function(Pointer<Void>),
-            int Function(Pointer<Void>)>('cd_position_ms'),
-        _sidRegs = lib.lookupFunction<
+            int Function(Pointer<Void>, Pointer<CdInfoStruct>)
+          >('cd_get_info'),
+      _positionMs = lib
+          .lookupFunction<
+            Uint32 Function(Pointer<Void>),
+            int Function(Pointer<Void>)
+          >('cd_position_ms'),
+      _sidRegs = lib
+          .lookupFunction<
             Int32 Function(Pointer<Void>, Int32, Pointer<Uint8>),
-            int Function(Pointer<Void>, int, Pointer<Uint8>)>('cd_get_sid_registers'),
-        _probe = lib.lookupFunction<
+            int Function(Pointer<Void>, int, Pointer<Uint8>)
+          >('cd_get_sid_registers'),
+      _probe = lib
+          .lookupFunction<
             Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<CdInfoStruct>),
-            int Function(Pointer<Utf8>, Pointer<Utf8>,
-                Pointer<CdInfoStruct>)>('cd_probe_file');
+            int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<CdInfoStruct>)
+          >('cd_probe_file');
 
   final String version;
   final Pointer<Void> Function() _audioCreate;
@@ -158,7 +193,8 @@ class ChipDeckNative {
   final int Function(Pointer<Void>, Pointer<CdInfoStruct>) _getInfo;
   final int Function(Pointer<Void>) _positionMs;
   final int Function(Pointer<Void>, int, Pointer<Uint8>) _sidRegs;
-  final int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<CdInfoStruct>) _probe;
+  final int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<CdInfoStruct>)
+  _probe;
 
   static ChipDeckNative? _instance;
 
@@ -218,15 +254,18 @@ class ChipDeckEngine {
   set sidModel(SidModel m) => _n._setSidModel(_player, m.index);
 
   bool loadSonglengths(String path) => using(
-      (a) => _n._loadSonglengths(_player, path.toNativeUtf8(allocator: a)) == 0);
+    (a) => _n._loadSonglengths(_player, path.toNativeUtf8(allocator: a)) == 0,
+  );
 
-  bool load(String path, {int subtune = 0}) => using((a) =>
-      _n._loadFile(_player, path.toNativeUtf8(allocator: a), subtune) == 0);
+  bool load(String path, {int subtune = 0}) => using(
+    (a) => _n._loadFile(_player, path.toNativeUtf8(allocator: a), subtune) == 0,
+  );
 
   bool selectSubtune(int subtune) => _n._selectSubtune(_player, subtune) == 0;
 
-  TuneInfo? get info =>
-      _n._getInfo(_player, _infoBuf) == 0 ? TuneInfo.fromStruct(_infoBuf.ref) : null;
+  TuneInfo? get info => _n._getInfo(_player, _infoBuf) == 0
+      ? TuneInfo.fromStruct(_infoBuf.ref)
+      : null;
 
   int get positionMs => _n._positionMs(_player);
 

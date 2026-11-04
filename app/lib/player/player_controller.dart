@@ -24,8 +24,9 @@ class PlaylistEntry {
   bool failed = false;
 
   String get fileName => p.basename(path);
-  String get title =>
-      (info?.title.isNotEmpty ?? false) ? info!.title : p.basenameWithoutExtension(path);
+  String get title => (info?.title.isNotEmpty ?? false)
+      ? info!.title
+      : p.basenameWithoutExtension(path);
   String get author => info?.author ?? '';
 }
 
@@ -33,8 +34,11 @@ class PlaylistEntry {
 List<String> _scanFolder(String dir) {
   final out = <String>[];
   try {
-    for (final f in Directory(dir).listSync(recursive: true, followLinks: false)) {
-      if (f is File && supportedExtensions.contains(p.extension(f.path).toLowerCase())) {
+    for (final f in Directory(
+      dir,
+    ).listSync(recursive: true, followLinks: false)) {
+      if (f is File &&
+          supportedExtensions.contains(p.extension(f.path).toLowerCase())) {
         out.add(f.path);
       }
     }
@@ -90,6 +94,9 @@ class PlayerController extends ChangeNotifier {
   bool shuffle = false;
 
   Timer? _ticker;
+
+  /// Called after the user picks a different Songlengths file.
+  VoidCallback? onSonglengthsChanged;
   String get engineVersion => _engine?.version ?? '';
   bool get hasEngine => _engine != null;
 
@@ -110,8 +117,11 @@ class PlayerController extends ChangeNotifier {
     sidModel = SidModel.values[(_prefs.getInt('sidModel') ?? 0).clamp(0, 2)];
     songlengthsPath = _prefs.getString('songlengths');
     defaultLengthSec = _prefs.getInt('defaultLength') ?? 180;
-    advanceMode = AdvanceMode.values[
-        (_prefs.getInt('advance') ?? 0).clamp(0, AdvanceMode.values.length - 1)];
+    advanceMode =
+        AdvanceMode.values[(_prefs.getInt('advance') ?? 0).clamp(
+          0,
+          AdvanceMode.values.length - 1,
+        )];
     shuffle = _prefs.getBool('shuffle') ?? false;
     final e = _engine;
     if (e != null) {
@@ -162,6 +172,7 @@ class PlayerController extends ChangeNotifier {
       _prefs.setString('songlengths', path);
       info = _engine?.info;
       _probeAll(force: true);
+      onSonglengthsChanged?.call();
     } else {
       message = 'Could not read Songlengths file.';
     }
@@ -202,6 +213,39 @@ class PlayerController extends ChangeNotifier {
     if (persist) _savePlaylist();
     notifyListeners();
     _probe(added);
+  }
+
+  /// Adds tunes whose metadata is already known (from the library index).
+  /// [replace] clears the playlist first; [play] starts the first added tune.
+  void addKnown(
+    List<(String, TuneInfo)> items, {
+    bool replace = false,
+    bool play = false,
+  }) {
+    if (replace) {
+      stop();
+      playlist.clear();
+      currentIndex = null;
+      info = null;
+    }
+    final existing = {
+      for (var i = 0; i < playlist.length; i++) playlist[i].path: i,
+    };
+    int? first;
+    for (final (path, tuneInfo) in items) {
+      final at = existing[path];
+      if (at != null) {
+        first ??= at;
+        continue;
+      }
+      final e = PlaylistEntry(path)..info = tuneInfo;
+      playlist.add(e);
+      existing[path] = playlist.length - 1;
+      first ??= playlist.length - 1;
+    }
+    _savePlaylist();
+    notifyListeners();
+    if (play && first != null) playIndex(first);
   }
 
   /// Adds every supported file below [dir] (recursively, sorted by path).
@@ -328,7 +372,9 @@ class PlayerController extends ChangeNotifier {
 
   void nextSubtune() {
     final i = info;
-    if (i != null && i.currentSubtune < i.subtunes) selectSubtune(i.currentSubtune + 1);
+    if (i != null && i.currentSubtune < i.subtunes) {
+      selectSubtune(i.currentSubtune + 1);
+    }
   }
 
   void previousSubtune() {
@@ -367,7 +413,10 @@ class PlayerController extends ChangeNotifier {
   Uint8List? sidRegisters(int chip) => _engine?.sidRegisters(chip);
 
   void _ensureTicker() {
-    _ticker ??= Timer.periodic(const Duration(milliseconds: 200), (_) => _tick());
+    _ticker ??= Timer.periodic(
+      const Duration(milliseconds: 200),
+      (_) => _tick(),
+    );
   }
 
   void _tick() {
