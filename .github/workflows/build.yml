@@ -97,6 +97,9 @@ jobs:
 
   app-android:
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v4
@@ -115,9 +118,6 @@ jobs:
       - name: Signing key from repository secrets (optional)
         # With the secrets set, every APK is signed with the same key and
         # installs as an update. Without them the build uses a debug key.
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         if: env.KEYSTORE_BASE64 != ''
         working-directory: app/android
         run: |
