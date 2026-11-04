@@ -355,3 +355,5 @@ slow volume flip on Digi) and landscape-channels-sndh.png.
 
 Not tested on real digi tunes in the cloud (HVSC is blocked here); worth
 checking with e.g. a Mahoney or Galway digi tune on Stephen's devices.
+
+Stephen tried 0.5.0-test.61 on the Ayn Thor: "that works."

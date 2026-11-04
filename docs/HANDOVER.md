@@ -56,6 +56,7 @@ and the version is given whenever a build is shared.
   The corner button switches to the old mixed scope ("Mix"). Same code on
   Windows and Android. Needs vendored-library patches, listed in
   third_party/README.md. Details in NOTES.md (2026-11-04, Every channel).
+  Stephen confirmed it works on the Ayn Thor (0.5.0-test.61, 2026-11-04).
 
 - **Android app (branch claude/project-thread-ryqtet, PR #3):** same Flutter
   app and core as Windows, built as an APK in CI (`app-android` job,
