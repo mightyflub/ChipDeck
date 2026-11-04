@@ -145,7 +145,8 @@ jobs:
           cp app/build/app/outputs/flutter-apk/app-release.apk dist/ChipDeck.apk
           cp LICENSE dist/LICENSE.txt
           unzip -l dist/ChipDeck.apk | grep libchipdeck.so
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs dist/ChipDeck.apk | grep -i "subject" | head -1 || true
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --print-certs dist/ChipDeck.apk | grep -i "subject" | head -1 || true
           rm -f app/android/release.jks app/android/key.properties
       - uses: actions/upload-artifact@v4
         with:
