@@ -87,3 +87,7 @@ What was done:
   Release (~8x real time) with RESAMPLE_INTERPOLATE at 48 kHz.
 - Verified: Linux build + tests (also under ASan), MinGW cross-compiled
   Windows exe builds. MSVC build is checked in GitHub Actions.
+
+## 2026-11-04: Confirmed on Windows
+
+Stephen ran the MinGW-built chipdeck-cli.exe on his PC: "runs well".

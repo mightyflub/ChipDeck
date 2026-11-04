@@ -11,7 +11,7 @@ Atari ST **.sndh**, possibly more chip formats.
 
 ## Current state (2026-11-04)
 
-- **Milestone 1 done (pending Stephen's test on real hardware):** a
+- **Milestone 1 done, confirmed working on Stephen's Windows PC (2026-11-04):** a
   command-line player `chipdeck-cli` that plays .sid files through the
   speakers or renders them to WAV.
 - `chipdeck-core` library with a plain C API (`core/include/chipdeck/chipdeck.h`)
@@ -131,7 +131,7 @@ Songlengths.md5 is in HVSC at `C64Music/DOCUMENTS/Songlengths.md5`.
 
 ## Next steps
 
-1. Stephen tests `chipdeck-cli.exe` on Windows with real HVSC tunes
+1. Done: Stephen ran chipdeck-cli.exe on Windows and it plays well. Still worth checking
    (include an RSID digi tune and a 2SID tune). Fix whatever breaks.
 2. Optional: try a smaller CPU budget (INTERPOLATE sampling) for Android.
 3. Start the Flutter app (`app/`): Windows desktop first, calling
