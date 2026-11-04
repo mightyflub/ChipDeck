@@ -225,11 +225,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
     (FormatFilter.all, 'All', 'All formats'),
     (FormatFilter.sid, 'C64', 'C64 SID'),
     (FormatFilter.atari, 'ST', 'Atari ST'),
-    (
-      FormatFilter.modules,
-      'MOD',
-      'Tracker modules (Amiga MOD, Fasttracker XM)',
-    ),
+    (FormatFilter.modules, 'MOD', 'MOD / XM'),
   ];
 
   /// Everything on one row: search, format filter, match count and actions.
@@ -315,22 +311,26 @@ class _LibraryPanelState extends State<LibraryPanel> {
         children: [
           _searchField(hint: 'Search title, composer, group or year'),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              for (final (f, _, label) in _filters)
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(label),
-                    selected: _filter == f,
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (_) {
-                      _filter = f;
-                      _runSearch();
-                    },
+          // Scrolls sideways if the panel is too narrow for every chip.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final (f, _, label) in _filters)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      label: Text(label),
+                      selected: _filter == f,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (_) {
+                        _filter = f;
+                        _runSearch();
+                      },
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
