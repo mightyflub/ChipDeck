@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../hvsc/stil.dart';
 import '../native/chipdeck_ffi.dart';
 import '../player/player_controller.dart' show isSupportedFile;
 
@@ -157,6 +158,10 @@ class LibraryController extends ChangeNotifier {
   void Function(String path)? onSonglengthsFound;
   String? Function()? songlengthsPath;
 
+  /// Called when a location contains HVSC STIL.txt (tune information).
+  void Function(String path)? onStilFound;
+  String? Function()? stilPath;
+
   static Future<LibraryController> create() async {
     final dir = await getApplicationSupportDirectory();
     final c = LibraryController._(File(p.join(dir.path, 'library.json')));
@@ -212,6 +217,10 @@ class LibraryController extends ChangeNotifier {
     roots.add(norm);
     roots.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     _detectSonglengths(norm);
+    if (stilPath?.call() == null) {
+      final stil = StilDatabase.find(norm);
+      if (stil != null) onStilFound?.call(stil);
+    }
     notifyListeners();
     await rescan();
   }

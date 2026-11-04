@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../hvsc/stil.dart';
 import '../native/chipdeck_ffi.dart';
 
 /// File extensions the core can play.
@@ -105,6 +106,27 @@ class PlayerController extends ChangeNotifier {
   /// Visualiser shows one scope per channel (true) or the mixed output.
   bool showChannels = true;
 
+  /// HVSC STIL.txt (tune information); BUGlist.txt is read from beside it.
+  String? stilPath;
+  StilDatabase? stil;
+
+  /// Landscape layout shows the STIL info instead of the visualiser.
+  bool showTuneInfo = false;
+
+  /// STIL/BUGlist entries for the current tune (cached per file).
+  TuneStil? get tuneStil {
+    final s = stil, e = current;
+    if (s == null || e == null) return null;
+    if (_stilFor != e.path) {
+      _stilFor = e.path;
+      _tuneStil = s.lookup(e.path);
+    }
+    return _tuneStil;
+  }
+
+  String? _stilFor;
+  TuneStil? _tuneStil;
+
   Timer? _ticker;
 
   /// Called after the user picks a different Songlengths file.
@@ -136,6 +158,8 @@ class PlayerController extends ChangeNotifier {
         )];
     shuffle = _prefs.getBool('shuffle') ?? false;
     showChannels = _prefs.getBool('channelScopes') ?? true;
+    showTuneInfo = _prefs.getBool('tuneInfo') ?? false;
+    stilPath = _prefs.getString('stil');
     final e = _engine;
     if (e != null) {
       e.volume = volume;
@@ -144,6 +168,11 @@ class PlayerController extends ChangeNotifier {
         songlengthsPath = null;
       }
     }
+    // Older settings have Songlengths but no STIL: look beside it.
+    if (stilPath == null && songlengthsPath != null) {
+      stilPath = _stilBeside(songlengthsPath!);
+    }
+    if (stilPath != null) _loadStil(stilPath!);
     final saved = _prefs.getStringList('playlist') ?? const [];
     addFiles(saved.where((f) => File(f).existsSync()).toList(), persist: false);
     final last = _prefs.getInt('lastIndex');
@@ -186,11 +215,59 @@ class PlayerController extends ChangeNotifier {
       info = _engine?.info;
       _probeAll(force: true);
       onSonglengthsChanged?.call();
+      if (stilPath == null) {
+        final st = _stilBeside(path);
+        if (st != null) setStil(st);
+      }
     } else {
       message = 'Could not read Songlengths file.';
     }
     notifyListeners();
     return ok;
+  }
+
+  static String? _stilBeside(String songlengths) {
+    final f = File(p.join(p.dirname(songlengths), 'STIL.txt'));
+    return f.existsSync() ? f.path : null;
+  }
+
+  /// Sets the STIL.txt file (null clears it). Loads in the background.
+  Future<bool> setStil(String? path) async {
+    if (path == null) {
+      stilPath = null;
+      stil = null;
+      _stilFor = null;
+      _prefs.remove('stil');
+      notifyListeners();
+      return true;
+    }
+    if (path == stilPath && stil != null) return true;
+    final previous = stilPath;
+    stilPath = path; // set now so a second auto-detect does not load it again
+    final ok = await _loadStil(path);
+    if (ok) {
+      _prefs.setString('stil', path);
+    } else {
+      stilPath = previous;
+      message = 'Could not read STIL file.';
+    }
+    notifyListeners();
+    return ok;
+  }
+
+  Future<bool> _loadStil(String path) async {
+    final db = await StilDatabase.load(path);
+    if (db == null) return false;
+    stil = db;
+    _stilFor = null;
+    notifyListeners();
+    return true;
+  }
+
+  void toggleTuneInfo() {
+    showTuneInfo = !showTuneInfo;
+    _prefs.setBool('tuneInfo', showTuneInfo);
+    notifyListeners();
   }
 
   void setDefaultLength(int seconds) {

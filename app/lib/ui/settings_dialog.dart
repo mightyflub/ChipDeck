@@ -114,6 +114,53 @@ class SettingsDialog extends StatelessWidget {
                     style: TextStyle(color: Palette.textMuted, fontSize: 12),
                   ),
                   const SizedBox(height: 22),
+                  const _Label('Tune info (HVSC STIL.txt)'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          c.stilPath ?? 'Not set: no composer or tune notes for SID tunes.',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: c.stilPath == null
+                                ? Palette.textMuted
+                                : Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () async {
+                          final f = await files.pickSingleFile(
+                            context,
+                            label: 'STIL',
+                            extensions: ['txt'],
+                          );
+                          if (f != null) c.setStil(f);
+                        },
+                        child: const Text('Choose…'),
+                      ),
+                      if (c.stilPath != null)
+                        IconButton(
+                          tooltip: 'Clear',
+                          onPressed: () => c.setStil(null),
+                          icon: const Icon(Icons.close),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    c.stil == null
+                        ? 'Found in HVSC at C64Music/DOCUMENTS/STIL.txt. BUGlist.txt beside it is read too.'
+                        : '${c.stil!.entryCount} entries. BUGlist.txt beside it is read too.',
+                    style: const TextStyle(
+                      color: Palette.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
                   const _Label('Default song length'),
                   const SizedBox(height: 8),
                   DropdownButton<int>(
