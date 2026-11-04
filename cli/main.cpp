@@ -1,5 +1,6 @@
 /*
- * chipdeck-cli: command-line SID player for testing the ChipDeck core.
+ * chipdeck-cli: command-line player for testing the ChipDeck core.
+ * Plays C64 .sid and Atari ST .sndh / .ym files.
  * Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
  */
 #include "chipdeck/chipdeck.h"
@@ -32,11 +33,12 @@ void usage()
 {
     std::fprintf(stderr,
         "ChipDeck CLI %s\n\n"
-        "Usage: chipdeck-cli [options] <file.sid>\n\n"
+        "Usage: chipdeck-cli [options] <file.sid|file.sndh|file.ym>\n\n"
         "Options:\n"
         "  -s, --subtune N       start at subtune N (default: tune's default)\n"
-        "  -t, --time SECONDS    stop after SECONDS (default: Songlengths or forever)\n"
-        "  -m, --model 6581|8580 force SID model\n"
+        "  -t, --time SECONDS    stop after SECONDS (default: tune length if known,\n"
+        "                        else forever)\n"
+        "  -m, --model 6581|8580 force SID model (SID only)\n"
         "  -l, --songlengths F   HVSC Songlengths.md5 file\n"
         "      --kernal F        KERNAL ROM (8 KB), improves RSID compatibility\n"
         "      --basic F         BASIC ROM (8 KB)\n"
@@ -120,8 +122,9 @@ void printInfo(cd_player* p)
     std::printf("Title   : %s\nAuthor  : %s\nReleased: %s\nFormat  : %s\n",
                 i.title, i.author, i.released, i.format);
     std::printf("Subtune : %d of %d (default %d)\n", i.current_subtune, i.subtunes, i.start_subtune);
-    std::printf("SID     : %d chip(s), %s, %s\n", i.sid_chips,
-                i.sid_model == CD_SID_8580 ? "8580" : "6581", i.is_ntsc ? "NTSC" : "PAL");
+    if (i.sid_chips > 0)  // 0 for Atari ST tunes
+        std::printf("SID     : %d chip(s), %s, %s\n", i.sid_chips,
+                    i.sid_model == CD_SID_8580 ? "8580" : "6581", i.is_ntsc ? "NTSC" : "PAL");
     if (i.length_ms > 0)
         std::printf("Length  : %d:%02d\n", i.length_ms / 60000, (i.length_ms / 1000) % 60);
 }

@@ -17,13 +17,18 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Render test tune to WAV
-        run: build\Release\chipdeck-cli.exe -t 5 -w test.wav tests\data\chipdeck-test.sid
+        run: |
+          build\Release\chipdeck-cli.exe -t 5 -w test.wav tests\data\chipdeck-test.sid
+          build\Release\chipdeck-cli.exe -t 5 -w test-sndh.wav tests\data\chipdeck-test.sndh
+          build\Release\chipdeck-cli.exe -t 5 -w test-ym.wav tests\data\chipdeck-test.ym
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item build\Release\chipdeck-cli.exe dist\
           Copy-Item tests\data\chipdeck-test.sid dist\
+          Copy-Item tests\data\chipdeck-test.sndh dist\
+          Copy-Item tests\data\chipdeck-test.ym dist\
           Copy-Item LICENSE dist\LICENSE.txt
       - uses: actions/upload-artifact@v4
         with:
@@ -41,4 +46,7 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
       - name: Render test tune to WAV
-        run: ./build/chipdeck-cli -t 5 -w test.wav tests/data/chipdeck-test.sid
+        run: |
+          ./build/chipdeck-cli -t 5 -w test.wav tests/data/chipdeck-test.sid
+          ./build/chipdeck-cli -t 5 -w test-sndh.wav tests/data/chipdeck-test.sndh
+          ./build/chipdeck-cli -t 5 -w test-ym.wav tests/data/chipdeck-test.ym

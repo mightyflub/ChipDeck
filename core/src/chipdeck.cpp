@@ -1,9 +1,12 @@
 /*
- * ChipDeck core implementation (SID via libsidplayfp + reSIDfp).
+ * ChipDeck core implementation.
+ * SID via libsidplayfp + reSIDfp; Atari ST .sndh/.ym via AtariAudio
+ * (see atari_backend.cpp). A cd_player holds one tune of either kind.
  * Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
  */
 #define CHIPDECK_BUILDING
 #include "chipdeck/chipdeck.h"
+#include "atari_backend.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -105,6 +108,10 @@ struct cd_player
 
     std::vector<uint8_t> kernal, basic, chargen;
 
+    // Set when the loaded tune is an Atari ST tune; then the SID members
+    // above are unused (tune is null, ready is false).
+    std::unique_ptr<chipdeck::AtariTune> atari;
+
     std::vector<short> chunk;  // engine output, interleaved stereo
     size_t chunkPos = 0;       // next unread int16 in chunk
     bool ready = false;
@@ -163,6 +170,17 @@ struct cd_player
         return 0;
     }
 
+    int loadAtari(const uint8_t* data, size_t size, int subtune)
+    {
+        tune.reset();
+        ready = false;
+        std::string err;
+        atari = chipdeck::AtariTune::load(data, size, sampleRate, subtune, err);
+        if (!atari) return fail(err);
+        error.clear();
+        return 0;
+    }
+
     int finishLoad(int subtune)
     {
         if (!tune->getStatus())
@@ -179,7 +197,7 @@ extern "C" {
 
 const char* cd_version(void)
 {
-    return CHIPDECK_VERSION " (libsidplayfp 3.1.2, libresidfp 1.2.3)";
+    return CHIPDECK_VERSION " (libsidplayfp 3.1.2, libresidfp 1.2.3, AtariAudio 1.27)";
 }
 
 cd_player* cd_create(uint32_t sample_rate)
@@ -257,6 +275,10 @@ int cd_load_file(cd_player* p, const char* path, int subtune)
     std::lock_guard<std::mutex> g(p->lock);
     try
     {
+        std::vector<uint8_t> bytes;
+        if (readFile(path, bytes) && chipdeck::isAtariTune(bytes.data(), bytes.size()))
+            return p->loadAtari(bytes.data(), bytes.size(), subtune);
+        p->atari.reset();
         p->tune.reset(new SidTune(tuneLoader, path, nullptr, true));
         return p->finishLoad(subtune);
     }
@@ -269,6 +291,10 @@ int cd_load_memory(cd_player* p, const void* data, size_t size, int subtune)
     std::lock_guard<std::mutex> g(p->lock);
     try
     {
+        const uint8_t* bytes = static_cast<const uint8_t*>(data);
+        if (chipdeck::isAtariTune(bytes, size))
+            return p->loadAtari(bytes, size, subtune);
+        p->atari.reset();
         p->tune.reset(new SidTune(static_cast<const uint_least8_t*>(data),
                                   static_cast<uint_least32_t>(size)));
         return p->finishLoad(subtune);
@@ -280,6 +306,12 @@ int cd_select_subtune(cd_player* p, int subtune)
 {
     if (!p) return 1;
     std::lock_guard<std::mutex> g(p->lock);
+    if (p->atari)
+    {
+        if (p->atari->select(subtune)) return 0;
+        p->error = "subtune out of range";
+        return 1;
+    }
     if (!p->tune) return p->fail("no tune loaded");
     const int songs = static_cast<int>(p->tune->getInfo()->songs());
     if (subtune < 1 || subtune > songs)
@@ -296,6 +328,7 @@ int cd_get_info(cd_player* p, cd_info* out)
     std::lock_guard<std::mutex> g(p->lock);
     std::memset(out, 0, sizeof *out);
     out->length_ms = -1;
+    if (p->atari) { p->atari->fillInfo(out); return 0; }
     if (!p->tune) return 1;
     const SidTuneInfo* ti = p->tune->getInfo();
     const unsigned nInfo = ti->numberOfInfoStrings();
@@ -323,6 +356,7 @@ size_t cd_render(cd_player* p, int16_t* out, size_t frames)
 {
     if (!p || !out) return 0;
     std::lock_guard<std::mutex> g(p->lock);
+    if (p->atari) return p->atari->render(out, frames);
     if (!p->ready) return 0;
 
     size_t want = frames * 2;  // int16 values
@@ -355,6 +389,7 @@ uint32_t cd_position_ms(cd_player* p)
 {
     if (!p) return 0;
     std::lock_guard<std::mutex> g(p->lock);
+    if (p->atari) return p->atari->positionMs();
     return p->ready ? p->engine.timeMs() : 0;
 }
 
@@ -373,6 +408,9 @@ int cd_probe_file(const char* path, const char* songlengths_path, cd_info* out)
     out->length_ms = -1;
     try
     {
+        std::vector<uint8_t> bytes;
+        if (readFile(path, bytes) && chipdeck::isAtariTune(bytes.data(), bytes.size()))
+            return chipdeck::AtariTune::probe(bytes.data(), bytes.size(), out) ? 0 : 1;
         SidTune tune(tuneLoader, path, nullptr, true);
         if (!tune.getStatus()) return 1;
         tune.selectSong(0);

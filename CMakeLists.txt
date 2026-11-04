@@ -19,24 +19,25 @@ option(CHIPDECK_BUILD_TESTS "Build tests" ON)
 add_subdirectory(third_party)
 
 # ------------------------------------------------------------ chipdeck-core
-add_library(chipdeck-core STATIC core/src/chipdeck.cpp)
+add_library(chipdeck-core STATIC core/src/chipdeck.cpp core/src/atari_backend.cpp)
 target_include_directories(chipdeck-core PUBLIC core/include)
 target_compile_definitions(chipdeck-core PRIVATE CHIPDECK_VERSION="${PROJECT_VERSION}")
-target_link_libraries(chipdeck-core PRIVATE sidplayfp)
+target_link_libraries(chipdeck-core PRIVATE sidplayfp atariaudio)
 
 # ---------------------------------------------------- chipdeck shared library
 # Core + audio output as one DLL/.so for the Flutter app (dart:ffi) and Android.
 option(CHIPDECK_BUILD_SHARED "Build the chipdeck shared library" ON)
 if(CHIPDECK_BUILD_SHARED)
-  set_target_properties(residfp sidplayfp miniaudio PROPERTIES POSITION_INDEPENDENT_CODE ON)
-  add_library(chipdeck SHARED core/src/chipdeck.cpp core/src/chipdeck_audio.cpp)
+  set_target_properties(residfp sidplayfp miniaudio atariaudio PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  add_library(chipdeck SHARED core/src/chipdeck.cpp core/src/atari_backend.cpp
+                              core/src/chipdeck_audio.cpp)
   target_include_directories(chipdeck PUBLIC core/include)
   target_compile_definitions(chipdeck
     PUBLIC CHIPDECK_SHARED
     PRIVATE CHIPDECK_VERSION="${PROJECT_VERSION}")
   set_target_properties(chipdeck PROPERTIES
     CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
-  target_link_libraries(chipdeck PRIVATE sidplayfp miniaudio)
+  target_link_libraries(chipdeck PRIVATE sidplayfp atariaudio miniaudio)
   if(MINGW)
     target_link_options(chipdeck PRIVATE -static -static-libgcc -static-libstdc++)
   endif()
@@ -56,4 +57,9 @@ if(CHIPDECK_BUILD_TESTS)
   target_compile_definitions(chipdeck-tests PRIVATE
     CHIPDECK_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
   add_test(NAME core COMMAND chipdeck-tests)
+  add_executable(chipdeck-atari-tests tests/atari_test.cpp)
+  target_link_libraries(chipdeck-atari-tests PRIVATE chipdeck-core)
+  target_compile_definitions(chipdeck-atari-tests PRIVATE
+    CHIPDECK_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+  add_test(NAME atari COMMAND chipdeck-atari-tests)
 endif()
