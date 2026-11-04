@@ -63,6 +63,25 @@ void tuneLoader(const char* fileName, std::vector<uint8_t>& buffer)
         buffer.clear();
 }
 
+bool openDb(SidDatabase& db, const char* path)
+{
+#ifdef _WIN32
+    int n = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
+    if (n <= 0) return false;
+    std::wstring w(static_cast<size_t>(n), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, path, -1, &w[0], n);
+    return db.open(w.c_str());
+#else
+    return db.open(path);
+#endif
+}
+
+// Songlengths database shared by cd_probe_file() calls, reopened only when
+// the path changes (the file is several MB, too slow to parse per probe).
+std::mutex probeDbLock;
+std::string probeDbPath;
+std::unique_ptr<SidDatabase> probeDb;
+
 void copyStr(char* dst, size_t cap, const char* src)
 {
     if (!src) src = "";
@@ -188,14 +207,7 @@ int cd_load_songlengths(cd_player* p, const char* path)
     if (!p || !path) return 1;
     std::lock_guard<std::mutex> g(p->lock);
     std::unique_ptr<SidDatabase> db(new SidDatabase());
-#ifdef _WIN32
-    int n = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
-    std::wstring w(n > 0 ? static_cast<size_t>(n) : 1u, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, path, -1, &w[0], n);
-    bool ok = db->open(w.c_str());
-#else
-    bool ok = db->open(path);
-#endif
+    bool ok = openDb(*db, path);
     if (!ok)
     {
         p->error = std::string("cannot open songlengths: ") + db->error();
@@ -344,6 +356,58 @@ uint32_t cd_position_ms(cd_player* p)
     if (!p) return 0;
     std::lock_guard<std::mutex> g(p->lock);
     return p->ready ? p->engine.timeMs() : 0;
+}
+
+int cd_get_sid_registers(cd_player* p, int chip, uint8_t regs[32])
+{
+    if (!p || !regs || chip < 0) return 1;
+    std::lock_guard<std::mutex> g(p->lock);
+    if (!p->ready) return 1;
+    return p->engine.getSidStatus(static_cast<unsigned>(chip), regs) ? 0 : 1;
+}
+
+int cd_probe_file(const char* path, const char* songlengths_path, cd_info* out)
+{
+    if (!path || !out) return 1;
+    std::memset(out, 0, sizeof *out);
+    out->length_ms = -1;
+    try
+    {
+        SidTune tune(tuneLoader, path, nullptr, true);
+        if (!tune.getStatus()) return 1;
+        tune.selectSong(0);
+        const SidTuneInfo* ti = tune.getInfo();
+        const unsigned nInfo = ti->numberOfInfoStrings();
+        copyStr(out->title,    sizeof out->title,    nInfo > 0 ? ti->infoString(0) : "");
+        copyStr(out->author,   sizeof out->author,   nInfo > 1 ? ti->infoString(1) : "");
+        copyStr(out->released, sizeof out->released, nInfo > 2 ? ti->infoString(2) : "");
+        copyStr(out->format,   sizeof out->format,   ti->formatString());
+        out->subtunes = static_cast<int>(ti->songs());
+        out->start_subtune = static_cast<int>(ti->startSong());
+        out->current_subtune = static_cast<int>(ti->currentSong());
+        out->sid_chips = ti->sidChips();
+        out->sid_model = ti->sidModel(0) == SidTuneInfo::SIDMODEL_8580 ? CD_SID_8580
+                       : ti->sidModel(0) == SidTuneInfo::SIDMODEL_6581 ? CD_SID_6581
+                       : CD_SID_AUTO;
+        out->is_ntsc = ti->clockSpeed() == SidTuneInfo::CLOCK_NTSC ? 1 : 0;
+        if (songlengths_path && *songlengths_path)
+        {
+            std::lock_guard<std::mutex> g(probeDbLock);
+            if (probeDbPath != songlengths_path)
+            {
+                probeDb.reset(new SidDatabase());
+                if (!openDb(*probeDb, songlengths_path)) probeDb.reset();
+                probeDbPath = songlengths_path;
+            }
+            if (probeDb)
+            {
+                int_least32_t ms = probeDb->lengthMs(tune);
+                out->length_ms = ms > 0 ? ms : -1;
+            }
+        }
+        return 0;
+    }
+    catch (...) { return 1; }
 }
 
 } // extern "C"
