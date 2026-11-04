@@ -134,12 +134,39 @@ if(ANDROID)
   target_link_libraries(miniaudio PUBLIC OpenSLES log)
 endif()
 
+# --------------------------------------------------------------- AtariAudio
+# Atari ST .sndh and .ym playback (68000 + YM2149 + MFP + STE DAC emulation).
+# Plain C++ with no dependencies; same source list as upstream's
+# example/AtariAudio2Wav/CMakeLists.txt.
+set(AA ${CMAKE_CURRENT_SOURCE_DIR}/atariaudio/src)
+add_library(atariaudio STATIC
+  ${AA}/AtariAudioRenderer.cpp
+  ${AA}/AtariMachine.cpp
+  ${AA}/Blitter.cpp
+  ${AA}/Mk68901.cpp
+  ${AA}/SndhRenderer.cpp
+  ${AA}/SteDac.cpp
+  ${AA}/timedb.cpp
+  ${AA}/ym2149c.cpp
+  ${AA}/YmRenderer.cpp
+  ${AA}/external/ice_24.cpp
+  ${AA}/external/lzh.cpp
+  ${AA}/external/Musashi/m68k.cpp
+  ${AA}/external/Musashi/m68kcpu.cpp
+  ${AA}/external/Musashi/m68kops.cpp
+)
+target_include_directories(atariaudio PUBLIC ${AA})
+target_compile_definitions(atariaudio PRIVATE $<$<NOT:$<CONFIG:Debug>>:NDEBUG>)
 if(MSVC)
-  foreach(t residfp sidplayfp miniaudio)
+  target_compile_definitions(atariaudio PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+if(MSVC)
+  foreach(t residfp sidplayfp miniaudio atariaudio)
     target_compile_options(${t} PRIVATE /W0 /utf-8)
   endforeach()
 else()
-  foreach(t residfp sidplayfp miniaudio)
+  foreach(t residfp sidplayfp miniaudio atariaudio)
     target_compile_options(${t} PRIVATE -w)
   endforeach()
 endif()
