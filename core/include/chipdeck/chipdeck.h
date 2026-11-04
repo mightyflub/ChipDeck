@@ -95,6 +95,37 @@ CD_API size_t cd_render(cd_player* p, int16_t* out, size_t frames);
 /* Playback position in milliseconds since the current subtune started. */
 CD_API uint32_t cd_position_ms(cd_player* p);
 
+/* Copy the 32 registers of SID chip `chip` (0-based), for visualisers.
+ * Returns 0 on success. Register layout is the C64 SID ($D400-$D41F). */
+CD_API int cd_get_sid_registers(cd_player* p, int chip, uint8_t regs[32]);
+
+/* Read a tune's metadata without creating a player (fast, for file lists).
+ * songlengths_path may be NULL. Returns 0 on success. */
+CD_API int cd_probe_file(const char* path, const char* songlengths_path,
+                         cd_info* out);
+
+/* ---------------------------------------------------------------------
+ * Audio output (optional, built into the chipdeck shared library).
+ * Owns a cd_player and plays it on the default audio device with
+ * miniaudio (WASAPI on Windows, AAudio/OpenSL on Android, Pulse/ALSA on
+ * Linux). UIs that do not have their own audio stack use this.
+ * --------------------------------------------------------------------- */
+typedef struct cd_audio cd_audio;
+
+/* Open the default output device at 48 kHz stereo. NULL on failure. */
+CD_API cd_audio* cd_audio_create(void);
+CD_API void cd_audio_destroy(cd_audio* a);
+/* The player this output renders from; use the cd_* calls above on it. */
+CD_API cd_player* cd_audio_player(cd_audio* a);
+CD_API void cd_audio_set_playing(cd_audio* a, int playing);
+CD_API int cd_audio_is_playing(cd_audio* a);
+/* 0.0 (mute) .. 1.0 (full). */
+CD_API void cd_audio_set_volume(cd_audio* a, float volume);
+/* Copy the most recent `frames` output samples (mono mix, newest last)
+ * for an oscilloscope. Returns frames copied. */
+CD_API size_t cd_audio_scope(cd_audio* a, int16_t* out, size_t frames);
+CD_API uint32_t cd_audio_sample_rate(cd_audio* a);
+
 #ifdef __cplusplus
 }
 #endif

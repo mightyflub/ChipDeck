@@ -24,6 +24,24 @@ target_include_directories(chipdeck-core PUBLIC core/include)
 target_compile_definitions(chipdeck-core PRIVATE CHIPDECK_VERSION="${PROJECT_VERSION}")
 target_link_libraries(chipdeck-core PRIVATE sidplayfp)
 
+# ---------------------------------------------------- chipdeck shared library
+# Core + audio output as one DLL/.so for the Flutter app (dart:ffi) and Android.
+option(CHIPDECK_BUILD_SHARED "Build the chipdeck shared library" ON)
+if(CHIPDECK_BUILD_SHARED)
+  set_target_properties(residfp sidplayfp miniaudio PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  add_library(chipdeck SHARED core/src/chipdeck.cpp core/src/chipdeck_audio.cpp)
+  target_include_directories(chipdeck PUBLIC core/include)
+  target_compile_definitions(chipdeck
+    PUBLIC CHIPDECK_SHARED
+    PRIVATE CHIPDECK_VERSION="${PROJECT_VERSION}")
+  set_target_properties(chipdeck PROPERTIES
+    CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+  target_link_libraries(chipdeck PRIVATE sidplayfp miniaudio)
+  if(MINGW)
+    target_link_options(chipdeck PRIVATE -static -static-libgcc -static-libstdc++)
+  endif()
+endif()
+
 # -------------------------------------------------------------- chipdeck-cli
 if(CHIPDECK_BUILD_CLI)
   add_executable(chipdeck-cli cli/main.cpp)
