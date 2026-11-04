@@ -1,0 +1,101 @@
+/*
+ * ChipDeck core: a small C API over the chiptune emulation engines.
+ * Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
+ *
+ * The same API is meant to be called from the CLI (C++), from Flutter via
+ * dart:ffi, and from Android via JNI, so it is plain C with no C++ types.
+ *
+ * Audio is always 16-bit signed, interleaved stereo, at the sample rate
+ * given to cd_create(). All strings are UTF-8.
+ *
+ * Threading: every function on one cd_player is internally locked, so it is
+ * safe to call cd_render() from an audio thread while the UI thread calls
+ * cd_select_subtune() or cd_get_info().
+ */
+#ifndef CHIPDECK_H
+#define CHIPDECK_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#if defined(_WIN32) && defined(CHIPDECK_SHARED)
+#  ifdef CHIPDECK_BUILDING
+#    define CD_API __declspec(dllexport)
+#  else
+#    define CD_API __declspec(dllimport)
+#  endif
+#elif defined(__GNUC__) || defined(__clang__)
+#  define CD_API __attribute__((visibility("default")))
+#else
+#  define CD_API
+#endif
+
+typedef struct cd_player cd_player;
+
+typedef enum cd_sid_model {
+    CD_SID_AUTO = 0, /* use what the tune asks for (default) */
+    CD_SID_6581 = 1,
+    CD_SID_8580 = 2
+} cd_sid_model;
+
+typedef struct cd_info {
+    char title[64];
+    char author[64];
+    char released[64];
+    char format[64];      /* e.g. "PlaySID one-file format (PSID)" */
+    int subtunes;         /* number of subtunes, >= 1 */
+    int start_subtune;    /* 1-based default subtune */
+    int current_subtune;  /* 1-based */
+    int sid_chips;        /* 1, 2 or 3 */
+    int sid_model;        /* cd_sid_model actually in use for chip 1 */
+    int is_ntsc;          /* 1 if the tune runs at NTSC speed */
+    int32_t length_ms;    /* from Songlengths database, or -1 if unknown */
+} cd_info;
+
+/* Library version string, e.g. "0.1.0 (libsidplayfp 3.1.2)". */
+CD_API const char* cd_version(void);
+
+/* Create a player that renders at sample_rate Hz (e.g. 44100 or 48000). */
+CD_API cd_player* cd_create(uint32_t sample_rate);
+CD_API void cd_destroy(cd_player* p);
+
+/* Last error message for this player, or "" if none. Valid until next call. */
+CD_API const char* cd_last_error(cd_player* p);
+
+/* Optional: HVSC Songlengths.md5 file so cd_info.length_ms is filled in. */
+CD_API int cd_load_songlengths(cd_player* p, const char* path);
+
+/* Optional: C64 ROM images (8 KB each). Improves RSID compatibility.
+ * Any path may be NULL. Must be called before cd_load_*(). */
+CD_API int cd_set_roms(cd_player* p, const char* kernal, const char* basic,
+                       const char* chargen);
+
+/* Force a SID model (default CD_SID_AUTO). Takes effect on next load. */
+CD_API void cd_set_sid_model(cd_player* p, cd_sid_model model);
+
+/* Load a tune. subtune is 1-based; 0 means the tune's default.
+ * Returns 0 on success, non-zero on error (see cd_last_error). */
+CD_API int cd_load_file(cd_player* p, const char* path, int subtune);
+CD_API int cd_load_memory(cd_player* p, const void* data, size_t size,
+                          int subtune);
+
+/* Switch subtune (1-based) and restart playback from the beginning. */
+CD_API int cd_select_subtune(cd_player* p, int subtune);
+
+CD_API int cd_get_info(cd_player* p, cd_info* out);
+
+/* Render up to `frames` stereo frames (2 * frames int16 values) into out.
+ * Returns frames written; less than requested only on error (0 if no tune). */
+CD_API size_t cd_render(cd_player* p, int16_t* out, size_t frames);
+
+/* Playback position in milliseconds since the current subtune started. */
+CD_API uint32_t cd_position_ms(cd_player* p);
+
+#ifdef __cplusplus
+}
+#endif
+#endif /* CHIPDECK_H */
