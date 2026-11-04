@@ -13,6 +13,11 @@ if(MSVC)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
 endif()
 
+if(WIN32)
+  # windows.h must not define min/max macros (they break std::min).
+  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 option(CHIPDECK_BUILD_CLI "Build the chipdeck-cli test player" ON)
 option(CHIPDECK_BUILD_TESTS "Build tests" ON)
 
