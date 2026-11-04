@@ -227,6 +227,8 @@ target_compile_features(tfmxdec PRIVATE cxx_std_17)
 if(MSVC)
   # Upstream uses the alternative token "and"; MSVC needs <iso646.h> for it.
   target_compile_options(tfmxdec PRIVATE /FIiso646.h)
+  # M_PI (Filter.cpp) is only defined by MSVC's <cmath> with this.
+  target_compile_definitions(tfmxdec PRIVATE _USE_MATH_DEFINES)
 endif()
 
 if(MSVC)
