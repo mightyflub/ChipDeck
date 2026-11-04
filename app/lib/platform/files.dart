@@ -13,7 +13,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../player/player_controller.dart' show supportedExtensions;
+import '../player/player_controller.dart' show isSupportedFile;
 
 const _channel = MethodChannel('chipdeck/android');
 
@@ -65,12 +65,23 @@ Future<List<String>> pickTuneFiles(BuildContext context) async {
     // The Android picker cannot filter by extension, so filter here.
     return [
       for (final f in paths ?? const <String>[])
-        if (supportedExtensions.contains(_ext(f))) f,
+        if (isSupportedFile(f)) f,
     ];
   }
   const group = XTypeGroup(
     label: 'Chiptunes',
-    extensions: ['sid', 'psid', 'rsid', 'mus', 'prg', 'sndh', 'snd', 'ym'],
+    extensions: [
+      'sid',
+      'psid',
+      'rsid',
+      'mus',
+      'prg',
+      'sndh',
+      'snd',
+      'ym',
+      'mod',
+      'xm',
+    ],
   );
   final files = await openFiles(acceptedTypeGroups: [group]);
   return [for (final f in files) f.path];
@@ -120,9 +131,4 @@ Future<String?> pickFolder(
     }
   }
   return getDirectoryPath(confirmButtonText: confirmButtonText);
-}
-
-String _ext(String path) {
-  final dot = path.lastIndexOf('.');
-  return dot < 0 ? '' : path.substring(dot).toLowerCase();
 }

@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'library/library.dart';
+import 'native_licenses.dart';
 import 'platform/android_media.dart';
 import 'platform/second_screen.dart';
 import 'ui/controls_screen.dart';
@@ -12,6 +13,7 @@ import 'ui/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerNativeLicenses();
   final controller = await PlayerController.create();
   final library = await LibraryController.create();
   library.songlengthsPath = () => controller.songlengthsPath;

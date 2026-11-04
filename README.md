@@ -1,7 +1,8 @@
 # ChipDeck
 
-Retro chiptune player for Windows and Android. Plays C64 `.sid` files today
-(via libsidplayfp/reSIDfp); Atari ST `.sndh` and a full GUI are planned.
+Retro chiptune player for Windows and Android. Plays C64 `.sid` (via
+libsidplayfp/reSIDfp), Atari ST `.sndh` and `.ym` (AtariAudio), Amiga `.mod`
+and Fasttracker 2 `.xm` (libxmp), with a Flutter app and a command-line player.
 
 Quick start on Windows (Visual Studio 2022):
 

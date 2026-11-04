@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../native/chipdeck_ffi.dart' show TuneSystem;
 import '../platform/remote_controls.dart';
 import 'theme.dart';
 
@@ -68,8 +69,10 @@ class _ControlsScreenState extends State<ControlsScreen> {
                 children: [
                   if (s.format.isNotEmpty)
                     _Tag(
-                      s.isAtari ? 'ATARI ST' : _shortFormat(s.format),
-                      warm: s.isAtari,
+                      s.system == TuneSystem.c64
+                          ? _shortFormat(s.format)
+                          : s.system.label.toUpperCase(),
+                      color: systemColor(s.system),
                     ),
                   const Spacer(),
                   if (s.playlistLength > 0)
@@ -306,13 +309,13 @@ class _ControlsScreenState extends State<ControlsScreen> {
 }
 
 class _Tag extends StatelessWidget {
-  const _Tag(this.text, {this.warm = false});
+  const _Tag(this.text, {this.color = Palette.scope});
   final String text;
-  final bool warm;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final col = warm ? Palette.warm : Palette.scope;
+    final col = color;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(

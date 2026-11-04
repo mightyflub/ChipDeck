@@ -1,6 +1,7 @@
 // Visualiser, redrawn every frame while playing. Two views (button in the
 // corner, remembered): one oscilloscope per channel (SID voices + Digi,
-// Atari YM A/B/C + STE DAC), or the mixed output with SID voice tiles.
+// Atari YM A/B/C + STE DAC, one per tracker channel for MOD/XM), or the mixed
+// output with SID voice tiles.
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -45,6 +46,16 @@ Color channelColor(String name) {
     case 'C':
       return Palette.voice[2];
     default:
+      // Tracker channels ("1", "2", ...) cycle through four colours.
+      final k = int.tryParse(n);
+      if (k != null && k > 0) {
+        return const [
+          Color(0xFF8E7CFF),
+          Color(0xFF5CE1E6),
+          Color(0xFFFF7AB6),
+          Palette.amiga,
+        ][(k - 1) % 4];
+      }
       return Palette.warm;
   }
 }
@@ -113,7 +124,7 @@ class _VisualizerState extends State<Visualizer>
     }
     final sidChips = c.info?.sidChips ?? 1;
     if (sidChips == 0) {
-      // Not a SID tune (e.g. Atari ST): no register view, scope only.
+      // Not a SID tune (Atari ST, modules): no register view, scope only.
       if (_voices.isNotEmpty) _voices = [];
       setState(() => _samples = c.showChannels ? _samples : c.scope(1536));
       return;
@@ -215,10 +226,17 @@ class _VisualizerState extends State<Visualizer>
         const gap = 8.0;
         final w = box.maxWidth;
         // One row per SID chip when there is room; otherwise fewer columns.
-        var cols = n % 4 == 0 ? 4 : n;
-        final minW = n > 4 ? 100.0 : 110.0;
+        // Modules with many channels (8 to 32 for .xm) use rows of 8.
+        // Too narrow: drop to the next column count that divides the
+        // channels evenly (6 -> 3 -> 2), so rows stay full.
+        var cols = n > 12 ? 8 : (n % 4 == 0 ? 4 : n);
+        final minW = n > 12 ? 60.0 : (n > 4 ? 100.0 : 110.0);
         while (cols > 1 && (w - (cols - 1) * gap) / cols < minW) {
-          cols = cols == 4 ? 2 : (cols == 3 ? 1 : cols - 1);
+          var next = cols - 1;
+          while (next > 1 && n % next != 0) {
+            next--;
+          }
+          cols = next > 1 ? next : cols - 1;
         }
         final rows = (n + cols - 1) ~/ cols;
         final tileW = (w - (cols - 1) * gap) / cols;

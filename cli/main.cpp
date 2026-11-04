@@ -1,6 +1,6 @@
 /*
  * chipdeck-cli: command-line player for testing the ChipDeck core.
- * Plays C64 .sid and Atari ST .sndh / .ym files.
+ * Plays C64 .sid, Atari ST .sndh / .ym and Amiga .mod files.
  * Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
  */
 #include "chipdeck/chipdeck.h"
@@ -33,7 +33,7 @@ void usage()
 {
     std::fprintf(stderr,
         "ChipDeck CLI %s\n\n"
-        "Usage: chipdeck-cli [options] <file.sid|file.sndh|file.ym>\n\n"
+        "Usage: chipdeck-cli [options] <file.sid|file.sndh|file.ym|file.mod>\n\n"
         "Options:\n"
         "  -s, --subtune N       start at subtune N (default: tune's default)\n"
         "  -t, --time SECONDS    stop after SECONDS (default: tune length if known,\n"
@@ -122,7 +122,7 @@ void printInfo(cd_player* p)
     std::printf("Title   : %s\nAuthor  : %s\nReleased: %s\nFormat  : %s\n",
                 i.title, i.author, i.released, i.format);
     std::printf("Subtune : %d of %d (default %d)\n", i.current_subtune, i.subtunes, i.start_subtune);
-    if (i.sid_chips > 0)  // 0 for Atari ST tunes
+    if (i.sid_chips > 0)  // 0 for Atari ST tunes and modules
         std::printf("SID     : %d chip(s), %s, %s\n", i.sid_chips,
                     i.sid_model == CD_SID_8580 ? "8580" : "6581", i.is_ntsc ? "NTSC" : "PAL");
     if (i.length_ms > 0)

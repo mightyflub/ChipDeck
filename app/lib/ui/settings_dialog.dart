@@ -205,7 +205,8 @@ class SettingsDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'SID emulation by libsidplayfp and reSIDfp. Free software under the GNU GPL v2 or later.',
+                    'SID emulation by libsidplayfp and reSIDfp, Atari ST by AtariAudio, '
+                    'MOD/XM by libxmp. Free software under the GNU GPL v2 or later.',
                     style: TextStyle(color: Palette.textMuted, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
