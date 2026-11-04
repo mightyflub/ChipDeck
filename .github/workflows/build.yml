@@ -94,3 +94,78 @@ jobs:
           flutter pub get
           flutter analyze
           flutter build linux --release
+
+  # Quick check (seconds) that the Android signing secrets reach CI and
+  # unlock the keystore, without waiting for the full APK build.
+  android-signing-check:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - name: Check signing secrets
+        run: |
+          echo "ANDROID_KEYSTORE_BASE64: $([ -n "$KEYSTORE_BASE64" ] && echo set || echo missing)"
+          echo "ANDROID_KEYSTORE_PASSWORD: $([ -n "$KEYSTORE_PASSWORD" ] && echo set || echo missing)"
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then exit 0; fi
+          echo "$KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/k.jks"
+          keytool -list -keystore "$RUNNER_TEMP/k.jks" -storepass "$KEYSTORE_PASSWORD" | grep -iE "entry|chipdeck"
+          rm -f "$RUNNER_TEMP/k.jks"
+
+  app-android:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+      - name: Analyze
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+      - name: Signing key from repository secrets (optional)
+        # With the secrets set, every APK is signed with the same key and
+        # installs as an update. Without them the build uses a debug key.
+        working-directory: app/android
+        run: |
+          echo "ANDROID_KEYSTORE_BASE64: $([ -n "$KEYSTORE_BASE64" ] && echo set || echo missing)"
+          echo "ANDROID_KEYSTORE_PASSWORD: $([ -n "$KEYSTORE_PASSWORD" ] && echo set || echo missing)"
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::warning::Signing secrets not available; APK is signed with a debug key."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > release.jks
+          keytool -list -keystore release.jks -storepass "$KEYSTORE_PASSWORD" | grep -i "entry"
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=chipdeck"
+            echo "keyPassword=$KEYSTORE_PASSWORD"
+          } > key.properties
+      - name: Build APK
+        working-directory: app
+        # One APK for all phones (arm64, 32-bit arm, x86_64). The build
+        # number grows with every CI run so each APK installs as an update.
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp app/build/app/outputs/flutter-apk/app-release.apk dist/ChipDeck.apk
+          cp LICENSE dist/LICENSE.txt
+          unzip -l dist/ChipDeck.apk | grep libchipdeck.so
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --print-certs dist/ChipDeck.apk | grep -i "subject" | head -1 || true
+          rm -f app/android/release.jks app/android/key.properties
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chipdeck-app-android
+          path: dist/

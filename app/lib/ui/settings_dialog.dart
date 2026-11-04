@@ -1,8 +1,11 @@
 // Settings: SID model, Songlengths database, default length, about.
-import 'package:file_selector/file_selector.dart';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../native/chipdeck_ffi.dart';
+import '../platform/files.dart' as files;
+import '../platform/second_screen.dart';
 import '../player/player_controller.dart';
 import 'theme.dart';
 
@@ -77,15 +80,12 @@ class SettingsDialog extends StatelessWidget {
                       const SizedBox(width: 8),
                       OutlinedButton(
                         onPressed: () async {
-                          final f = await openFile(
-                            acceptedTypeGroups: const [
-                              XTypeGroup(
-                                label: 'Songlengths',
-                                extensions: ['md5', 'txt'],
-                              ),
-                            ],
+                          final f = await files.pickSingleFile(
+                            context,
+                            label: 'Songlengths',
+                            extensions: ['md5', 'txt'],
                           );
-                          if (f != null) c.setSonglengths(f.path);
+                          if (f != null) c.setSonglengths(f);
                         },
                         child: const Text('Choose…'),
                       ),
@@ -116,6 +116,25 @@ class SettingsDialog extends StatelessWidget {
                         DropdownMenuItem(value: e.key, child: Text(e.value)),
                     ],
                   ),
+                  if (Platform.isAndroid) ...[
+                    const SizedBox(height: 16),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: secondScreenEnabled,
+                      builder: (_, on, _) => SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Controls on second screen'),
+                        subtitle: const Text(
+                          'On dual-screen devices such as the Ayn Thor, show the player controls on the other screen.',
+                          style: TextStyle(
+                            color: Palette.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                        value: on,
+                        onChanged: setSecondScreenEnabled,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 22),
                   const Divider(),
                   const SizedBox(height: 8),

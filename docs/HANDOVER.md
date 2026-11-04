@@ -9,7 +9,32 @@ ChipDeck is a retro chiptune player for **Windows and Android**. First
 target: play C64 **.sid** files on Windows. Also Atari ST **.sndh** and
 **.ym** (done in the core and CLI). Later: Android, possibly more chip formats.
 
+## Keeping Windows and Android in sync
+
+Stephen's rule (2026-11-04): every feature or fix lands on both Windows and
+Android, or is listed under "Pending on one platform" below. Both apps are
+the same Flutter code (`app/lib`) and the same native core; platform code
+lives only in `app/lib/platform/` (Dart) and `app/android/.../kotlin`
+(Android glue). Prefer shared Dart code; branch on `Platform.isAndroid`
+only inside `lib/platform/`.
+
+### Pending on one platform
+
+- Android only: background playback notification, lock screen/headset
+  controls, pause on headphone unplug (Windows has no equivalent need yet;
+  SMTC media keys on Windows would be the counterpart).
+- Android only: player controls on a second screen (dual-screen devices
+  such as the Ayn Thor). Windows could do the same on a second monitor
+  with a second window; not planned unless asked.
+- Windows only: keyboard shortcuts (harmless on Android; work with a
+  Bluetooth keyboard).
+
 ## Current state (2026-11-04)
+
+- **Android app (branch claude/project-thread-ryqtet, PR #3):** same Flutter
+  app and core as Windows, built as an APK in CI (`app-android` job,
+  artifact `chipdeck-app-android` containing `ChipDeck.apk`). Not yet tried
+  on a phone. See "The Android app" below.
 
 - **Milestone 1 done, confirmed working on Stephen's Windows PC:** a
   command-line player `chipdeck-cli` that plays .sid files through the
@@ -44,7 +69,10 @@ CMakeLists.txt            top-level build (core, cli, tests)
 core/include/chipdeck/    public C API (chipdeck.h)
 core/src/                 implementation: chipdeck.cpp (C API + SID via libsidplayfp),
                           atari_backend.cpp (SNDH/YM via AtariAudio), chipdeck_audio.cpp (output)
-app/                      Flutter GUI (lib/native FFI, lib/player state, lib/ui widgets)
+app/                      Flutter GUI (lib/native FFI, lib/player state, lib/ui widgets,
+                          lib/platform pickers + Android media bridge)
+app/android/              Android project: Gradle builds libchipdeck.so from the root
+                          CMakeLists; MainActivity.kt (storage, pickers), PlaybackService.kt
 cli/main.cpp              chipdeck-cli (miniaudio output, WAV export, keys)
 tests/core_test.cpp       SID core tests, run with ctest
 tests/atari_test.cpp      SNDH/YM core tests
@@ -99,6 +127,9 @@ docs/                     HANDOVER.md (this), NOTES.md (log)
 | App look | Dark theme, violet accent (#8E7CFF), cyan phosphor scope | Retro feel, readable |
 | SNDH + YM emulation | AtariAudio 1.27 (vendored, MIT) | One small dependency-free library for both formats; see SNDH_YM_PLAN.md |
 | Sampling | 48 kHz, RESAMPLE_INTERPOLATE | Best quality; ~8x real time on one core, fine for playback |
+| Android file access | "All files access" + SAF pickers mapped to paths | Library/index code identical to Windows; fast on HVSC. Not Play Store friendly (see NOTES.md) |
+| Android background audio | Foreground service + MediaSessionCompat (androidx.media) | Survives screen off; lock screen and headset controls |
+| Android signing | Key from repo secrets in CI, debug key otherwise | Committing a key was refused as a credential leak |
 
 ## How to build and run
 
@@ -146,6 +177,28 @@ folder) with a C64/Atari filter. If a location contains
 DOCUMENTS/Songlengths.md5 it is picked up automatically.
 Code: `app/lib/library/library.dart`, `app/lib/ui/library_panel.dart`.
 
+Layouts (shared by every platform, chosen by window size in
+`home_page.dart`): wide (>= 860 dp: side panel + now playing), portrait
+phone (bottom bar), and short landscape (< 560 dp high, e.g. Ayn Thor top
+screen ~731x411 dp): a side rail with play/pause and next instead of the
+title and bottom bars, one-row toolbars in Library and Playlist, one-line
+list rows with columns (title, composer, year, folder, length, subtunes)
+whenever a list is >= 560 dp wide, and a two-column Now playing (details
+and controls left, scope and voices right). To check a layout on Linux:
+`CHIPDECK_WINDOW=731x411 build/linux/x64/release/bundle/chipdeck`.
+Screenshots: docs/screenshots/landscape-*.png.
+
+Second screen (Android): when the device has another display (Ayn Thor's
+bottom screen, an external monitor), the player controls move there
+(`lib/ui/controls_screen.dart`, screenshot
+docs/screenshots/second-screen-controls.png) and the main screen drops its
+transport and subtune buttons. The controls are a second Flutter engine
+(`controlsMain()` in `lib/main.dart`) shown in an Android `Presentation`
+by `SecondScreen.kt`; state and actions go through MainActivity
+(`controlsState` / `controlsAction`, see `lib/platform/remote_controls.dart`
+and `android_media.dart`). Setting: "Controls on second screen" (on by
+default). Not yet tried on a real dual-screen device.
+
 App features: playlist (files or whole folders, searchable, remembered
 between runs), now playing (title, author, released, PSID/RSID, 6581/8580,
 PAL/NTSC, 2SID/3SID), oscilloscope, per-voice activity (waveform, note,
@@ -153,6 +206,37 @@ level), progress with Songlengths support, transport, subtune picker,
 volume, auto-advance modes (all subtunes then next, next tune, repeat),
 shuffle, settings (SID model, Songlengths.md5, default length).
 Keys: Space play/pause, Left/Right subtune, N/P tune, +/- volume.
+
+### The Android app
+
+Easiest: download `chipdeck-app-android` from the latest GitHub Actions run
+(Actions tab, newest "build" run, Artifacts), unzip, copy `ChipDeck.apk` to
+the phone and open it (allow "install unknown apps" for the file manager or
+browser). On first use of "Add location" / "Add files" ChipDeck explains and
+opens Android's "All files access" screen; switch it on and come back.
+Library locations are picked with the system folder picker; internal
+storage and SD cards work, cloud folders do not (single files from Drive
+etc. are copied into the app).
+
+Signing: the secrets below were set up on 2026-11-04 (Stephen keeps
+chipdeck.jks, alias chipdeck), so CI APKs from then on install as updates.
+The quick `android-signing-check` CI job shows whether the secrets arrive
+and unlock the key. Without secrets, CI signs with a throwaway debug key, so a newer
+APK only installs after uninstalling the old one (which clears the library
+and settings). To get in-place updates, create a key once and add two
+repository secrets (Settings > Secrets and variables > Actions):
+
+```
+keytool -genkeypair -keystore chipdeck.jks -alias chipdeck -keyalg RSA -keysize 2048 -validity 20000
+# ANDROID_KEYSTORE_BASE64  = base64 of chipdeck.jks (PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("chipdeck.jks")))
+# ANDROID_KEYSTORE_PASSWORD = the password (use the same for store and key)
+```
+
+Keep chipdeck.jks safe; it is needed for every future update.
+Local build: Flutter + Android Studio (SDK, NDK, CMake from SDK Manager),
+then `cd app && flutter build apk --release` (or `flutter run` with a phone
+attached). Optional `app/android/key.properties` (storeFile, storePassword,
+keyAlias, keyPassword) for release signing; it is git-ignored.
 
 ### Linux
 
@@ -191,6 +275,12 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Known limitations
 
+- Android: no audio focus handling yet (ChipDeck keeps playing over other
+  apps and calls; headphone unplug does pause). Back button does not go up
+  a library folder (use the breadcrumbs). Cloud folders (Drive etc.) cannot
+  be library locations. "All files access" would block a Google Play
+  release (see NOTES.md, 2026-11-04 Android). Default Flutter launcher icon.
+
 - No KERNAL/BASIC ROMs bundled. Most tunes play fine; a few RSID tunes need
   them (`--kernal/--basic/--chargen`). Commodore ROMs are copyrighted, so
   we should ship open replacement ROMs or let users point to their own.
@@ -212,11 +302,12 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 1. Stephen confirmed the Windows app and the library/search work (2026-11-04:
    "works well enough for now. I like it"). Next: merge PR #2, then Android.
    Still worth testing real HVSC tunes: an RSID digi tune and a 2SID tune.
-2. Android: add `externalNativeBuild` to `app/android/app/build.gradle.kts`
-   pointing at the repo root CMakeLists (`CHIPDECK_BUILD_CLI=OFF`,
-   `CHIPDECK_BUILD_TESTS=OFF`), check miniaudio on AAudio, file access
-   via the Storage Access Framework, and maybe INTERPOLATE sampling to
-   save battery.
+2. Android (PR #3): Stephen installs ChipDeck.apk and checks playback
+   (SID and SNDH/YM), the library on phone storage/SD card, background
+   playback with the screen off, and notification controls. Then: audio
+   focus (pause for calls/other apps), a real app icon (both platforms),
+   signing secrets for in-place updates, battery check (maybe a lighter
+   resampler on phones).
 3. SNDH/YM: Stephen tries chipdeck-cli with real tunes from the SNDH
    archive (include an STE DAC tune and a digidrum YM). Then add .sndh/.ym
    (and .snd) to the app's file filters; `cd_probe_file` already handles

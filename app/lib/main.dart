@@ -3,6 +3,9 @@
 import 'package:flutter/material.dart';
 
 import 'library/library.dart';
+import 'platform/android_media.dart';
+import 'platform/second_screen.dart';
+import 'ui/controls_screen.dart';
 import 'player/player_controller.dart';
 import 'ui/home_page.dart';
 import 'ui/theme.dart';
@@ -15,10 +18,20 @@ Future<void> main() async {
   library.onSonglengthsFound = (path) => controller.setSonglengths(path);
   // A new Songlengths file changes lengths for every tune: refresh the index.
   controller.onSonglengthsChanged = () => library.rescan(full: true);
+  await loadSecondScreenSetting();
+  AndroidMedia.attach(controller);
   runApp(ChipDeckApp(controller: controller, library: library));
   // Pick up tunes added to the archive since last time (only new or
   // changed files are read, so this is quick).
   library.rescan();
+}
+
+/// Entry point for the player controls on a second screen (dual-screen
+/// handhelds). Started by SecondScreen.kt in its own Flutter engine.
+@pragma('vm:entry-point')
+void controlsMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const ControlsApp());
 }
 
 class ChipDeckApp extends StatelessWidget {

@@ -197,3 +197,83 @@ them ... we need that and a search index".
   with Isolate.exit (no copy).
 - Tested with a generated fake archive of 2642 files (HVSC-like folders);
   indexed in a few seconds in the container.
+
+## 2026-11-04: Android app
+
+Stephen: "build an android version of this app. Going forward we'll keep
+the two versions in sync". So one Flutter codebase and one native core for
+both; platform code is kept small and behind `app/lib/platform/`.
+
+- Native: `app/android/app/build.gradle.kts` uses `externalNativeBuild`
+  with the repo root CMakeLists (`CHIPDECK_BUILD_CLI/TESTS=OFF`, target
+  `chipdeck-shared`, static libc++). Dart loads `libchipdeck.so` by name,
+  which already worked in `chipdeck_ffi.dart`. miniaudio picks AAudio,
+  falling back to OpenSL ES (third_party links OpenSLES and log on Android).
+- Storage, options considered:
+  1. Pure SAF (content:// tree URIs everywhere): would need a native
+     directory walker and an fd/memory based load path for the core and the
+     index, and a different code path from Windows. Slow for HVSC's ~60k
+     files (SAF queries are IPC calls).
+  2. **Chosen: "All files access" (MANAGE_EXTERNAL_STORAGE) + SAF pickers
+     mapped back to paths.** The library, playlist and Songlengths code stay
+     identical to Windows (dart:io paths). Fine for a sideloaded APK. Google
+     Play only allows this permission for some app types, so a Play release
+     would need option 1 or a review exception (noted in HANDOVER).
+  Tree/document IDs from `com.android.externalstorage.documents`
+  (`primary:Music/HVSC`, `1A2B-3C4D:...` for SD cards, `home:` for
+  Documents) map to `/storage/emulated/0/...` or `/storage/<volume>/...`.
+  Download provider `raw:` IDs are paths too. Anything else (Drive, Downloads
+  `msf:` IDs) is copied to `files/imported/`. Folders that do not map get a
+  clear error.
+- Background playback: the audio thread is native, so it keeps running when
+  the activity is hidden, but Android would kill the process. A
+  `mediaPlayback` foreground service (`PlaybackService.kt`) runs while a tune
+  plays, with a MediaStyle notification and a MediaSessionCompat (lock
+  screen, headset and Bluetooth buttons). Paused: the service leaves the
+  foreground but keeps the notification. Dart drives it through
+  `lib/platform/android_media.dart`, only sending changes (the player
+  notifies every 200 ms).
+- Back on the root screen calls `moveTaskToBack` (FlutterActivity
+  `popSystemNavigator`), so back does not stop the music. Swiping the app
+  away from recents or finishing the activity ends the process, because the
+  native audio device would otherwise outlive the Flutter engine.
+- Library fix (both platforms): roots that cannot be listed keep their old
+  entries instead of being emptied (matters for revoked permission or a
+  removed SD card; same for an offline network drive on Windows).
+- Signing: committing a keystore was refused as a credential leak, so CI
+  signs with a key from repository secrets when they exist and otherwise
+  with a per-run debug key (then each new APK needs an uninstall first).
+- Not verifiable in the container: the Android SDK/NDK hosts
+  (dl.google.com) are blocked, so the APK is built only in CI.
+
+## 2026-11-04: Landscape layout (Ayn Thor)
+
+Stephen tried the APK on his Ayn Thor: it works (library, SID playback in
+the background), but search showed hardly any results on the landscape top
+screen, and he asked for the whole UI to suit landscape. At ~731x411 dp
+the old phone layout spent ~330 dp on chrome (title bar, library header,
+search box, filter chips, results header, bottom bar), leaving room for
+about one result. Now (same code on all platforms, by window size):
+side rail instead of title and bottom bars, single-row toolbars, 40 dp
+one-line rows with columns, and a two-column Now playing that fits without
+scrolling. Search shows 9 rows at 731x411 instead of ~1. Wide desktop and
+portrait layouts are unchanged (checked with screenshots under Xvfb using
+the new CHIPDECK_WINDOW size override in the Linux runner).
+
+## 2026-11-04: Second-screen controls
+
+Stephen asked for dual-screen support on the Ayn Thor: player controls on
+the bottom screen, everything else on top. Android exposes the second
+display through DisplayManager, so ChipDeck shows an Android Presentation
+there whenever a display other than its own is on. The controls are
+Flutter too, in a second engine from a FlutterEngineGroup (cheap: it
+shares the code and assets with the main engine) with its own entrypoint,
+`controlsMain`. The second engine has no player of its own: the main engine
+sends a small state map (title, position, subtunes, volume, advance mode,
+playlist position) on every player change, and the controls send actions
+back; Kotlin only relays. While the controls are showing, the main screen
+hides its transport and subtune buttons to give the library more room.
+Untested on hardware: the Thor may not report its bottom screen as a
+presentation display, which is why any non-own display is used as a
+fallback. A setting turns it off.
+

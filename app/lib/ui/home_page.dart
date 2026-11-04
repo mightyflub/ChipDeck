@@ -1,9 +1,10 @@
 // Main window: playlist + now playing, adapting to narrow (phone) widths.
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../library/library.dart';
+import '../platform/second_screen.dart';
+import '../platform/files.dart' as files;
 import '../player/player_controller.dart';
 import 'library_panel.dart';
 import 'now_playing.dart';
@@ -56,19 +57,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> pickFiles() async {
-    const group = XTypeGroup(
-      label: 'Chiptunes',
-      extensions: ['sid', 'psid', 'rsid', 'mus', 'prg', 'sndh', 'snd', 'ym'],
-    );
-    final files = await openFiles(acceptedTypeGroups: [group]);
-    if (files.isEmpty) return;
+    final paths = await files.pickTuneFiles(context);
+    if (paths.isEmpty) return;
     final start = c.playlist.length;
-    c.addFiles(files.map((f) => f.path).toList());
+    c.addFiles(paths);
     if (c.current == null && c.playlist.length > start) c.playIndex(start);
   }
 
   Future<void> pickFolder() async {
-    final dir = await getDirectoryPath();
+    final dir = await files.pickFolder(context);
     if (dir == null) return;
     final start = c.playlist.length;
     final n = await c.addFolder(dir);
@@ -129,67 +126,199 @@ class _HomePageState extends State<HomePage> {
       child: LayoutBuilder(
         builder: (context, box) {
           final wide = box.maxWidth >= 860;
-          final playlist = PlaylistPanel(
-            controller: c,
-            onAddFiles: pickFiles,
-            onAddFolder: pickFolder,
-            onPlayed: wide ? null : () => setState(() => _tab = 0),
+          // Phone back button: return to Now playing first.
+          return PopScope(
+            canPop: wide || _tab == 0,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) setState(() => _tab = 0);
+            },
+            child: _body(context, box, wide),
           );
-          final library = LibraryPanel(
-            library: lib,
-            player: c,
-            onPlayed: wide ? null : () => setState(() => _tab = 0),
-          );
-          final nowPlaying = NowPlaying(controller: c, compact: !wide);
-          return Scaffold(
-            appBar: _appBar(context),
-            body: c.hasEngine
-                ? (wide
-                      ? Row(
-                          children: [
-                            SizedBox(
-                              width: (box.maxWidth * 0.38).clamp(340, 520),
-                              child: _SidePanel(
-                                index: _side,
-                                onChanged: (i) => setState(() => _side = i),
-                                library: library,
-                                playlist: playlist,
-                                playlistCount: c.playlist.length,
-                              ),
-                            ),
-                            const VerticalDivider(width: 1),
-                            Expanded(child: nowPlaying),
-                          ],
-                        )
-                      : IndexedStack(
-                          index: _tab,
-                          children: [nowPlaying, library, playlist],
-                        ))
-                : _EngineError(message: c.engineError ?? 'Unknown error'),
-            bottomNavigationBar: wide
-                ? null
-                : NavigationBar(
-                    backgroundColor: Palette.panel,
-                    indicatorColor: Palette.accent.withValues(alpha: 0.25),
-                    selectedIndex: _tab,
-                    onDestinationSelected: (i) => setState(() => _tab = i),
-                    destinations: const [
-                      NavigationDestination(
-                        icon: Icon(Icons.graphic_eq),
-                        label: 'Now playing',
+        },
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context, BoxConstraints box, bool wide) {
+    final playlist = PlaylistPanel(
+      controller: c,
+      onAddFiles: pickFiles,
+      onAddFolder: pickFolder,
+      onPlayed: wide ? null : () => setState(() => _tab = 0),
+    );
+    final library = LibraryPanel(
+      library: lib,
+      player: c,
+      onPlayed: wide ? null : () => setState(() => _tab = 0),
+    );
+    final nowPlaying = NowPlaying(controller: c, compact: !wide);
+    // Short screens (phones and handhelds in landscape): a side rail
+    // replaces the title bar and the bottom bar, leaving the height for
+    // lists.
+    final short = !wide && box.maxHeight < 560;
+    final content = c.hasEngine
+        ? (wide
+              ? Row(
+                  children: [
+                    SizedBox(
+                      width: (box.maxWidth * 0.38).clamp(340, 520),
+                      child: _SidePanel(
+                        index: _side,
+                        onChanged: (i) => setState(() => _side = i),
+                        library: library,
+                        playlist: playlist,
+                        playlistCount: c.playlist.length,
                       ),
-                      NavigationDestination(
-                        icon: Icon(Icons.library_music_outlined),
-                        label: 'Library',
+                    ),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: nowPlaying),
+                  ],
+                )
+              : IndexedStack(
+                  index: _tab,
+                  children: [nowPlaying, library, playlist],
+                ))
+        : _EngineError(message: c.engineError ?? 'Unknown error');
+    return Scaffold(
+      appBar: short ? null : _appBar(context),
+      body: short
+          ? SafeArea(
+              child: Row(
+                children: [
+                  _rail(),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: content),
+                ],
+              ),
+            )
+          : content,
+      bottomNavigationBar: wide || short
+          ? null
+          : NavigationBar(
+              backgroundColor: Palette.panel,
+              indicatorColor: Palette.accent.withValues(alpha: 0.25),
+              selectedIndex: _tab,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.graphic_eq),
+                  label: 'Now playing',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.library_music_outlined),
+                  label: 'Library',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.queue_music),
+                  label: 'Playlist',
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _rail() {
+    // Rebuilds with the player so the play/pause button stays current.
+    return ListenableBuilder(
+      listenable: Listenable.merge([c, secondScreenActive]),
+      builder: (context, _) => _railBody(),
+    );
+  }
+
+  Widget _railBody() {
+    return LayoutBuilder(
+      builder: (context, box) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: box.maxHeight),
+          child: IntrinsicHeight(
+            child: NavigationRail(
+              backgroundColor: Palette.panel,
+              indicatorColor: Palette.accent.withValues(alpha: 0.25),
+              minWidth: 60,
+              labelType: NavigationRailLabelType.none,
+              groupAlignment: -0.6,
+              selectedIndex: _tab,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              leading: const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: _Logo(),
+              ),
+              // Play/pause and next stay reachable from every tab.
+              trailing: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  if (!secondScreenActive.value) ...[
+                    IconButton(
+                      tooltip: c.playing ? 'Pause' : 'Play',
+                      color: Palette.accent,
+                      onPressed: c.current != null || c.playlist.isNotEmpty
+                          ? c.togglePlay
+                          : null,
+                      icon: Icon(
+                        c.playing
+                            ? Icons.pause_circle_filled
+                            : Icons.play_circle_filled,
+                        size: 32,
                       ),
-                      NavigationDestination(
-                        icon: Icon(Icons.queue_music),
-                        label: 'Playlist',
+                    ),
+                    IconButton(
+                      tooltip: 'Next tune',
+                      onPressed: c.playlist.isEmpty ? null : c.nextTrack,
+                      icon: const Icon(Icons.skip_next_rounded),
+                    ),
+                  ],
+                  PopupMenuButton<String>(
+                    tooltip: 'More',
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (v) {
+                      switch (v) {
+                        case 'files':
+                          pickFiles();
+                        case 'folder':
+                          pickFolder();
+                        case 'settings':
+                          showDialog<void>(
+                            context: context,
+                            builder: (_) => SettingsDialog(controller: c),
+                          );
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'files',
+                        enabled: c.hasEngine,
+                        child: const Text('Add files'),
+                      ),
+                      PopupMenuItem(
+                        value: 'folder',
+                        enabled: c.hasEngine,
+                        child: const Text('Add folder'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'settings',
+                        child: Text('Settings'),
                       ),
                     ],
                   ),
-          );
-        },
+                ],
+              ),
+              destinations: const [
+                NavigationRailDestination(
+                  icon: Icon(Icons.graphic_eq),
+                  label: Text('Now playing'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.library_music_outlined),
+                  label: Text('Library'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.queue_music),
+                  label: Text('Playlist'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

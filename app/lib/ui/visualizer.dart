@@ -9,9 +9,12 @@ import '../player/player_controller.dart';
 import 'theme.dart';
 
 class Visualizer extends StatefulWidget {
-  const Visualizer({super.key, required this.controller, required this.height});
+  const Visualizer({super.key, required this.controller, this.height});
   final PlayerController controller;
-  final double height;
+
+  /// Scope height; null makes the scope fill the space left by the voice
+  /// tiles (needs a bounded height, used by the landscape layout).
+  final double? height;
 
   @override
   State<Visualizer> createState() => _VisualizerState();
@@ -123,23 +126,24 @@ class _VisualizerState extends State<Visualizer>
 
   @override
   Widget build(BuildContext context) {
+    final scope = Container(
+      height: widget.height,
+      decoration: BoxDecoration(
+        color: const Color(0xFF080912),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Palette.border),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: CustomPaint(
+          painter: _ScopePainter(_samples),
+          size: Size.infinite,
+        ),
+      ),
+    );
     return Column(
       children: [
-        Container(
-          height: widget.height,
-          decoration: BoxDecoration(
-            color: const Color(0xFF080912),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Palette.border),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: CustomPaint(
-              painter: _ScopePainter(_samples),
-              size: Size.infinite,
-            ),
-          ),
-        ),
+        if (widget.height == null) Expanded(child: scope) else scope,
         if (_voices.isNotEmpty) const SizedBox(height: 12),
         if (_voices.isNotEmpty)
           LayoutBuilder(

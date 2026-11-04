@@ -51,118 +51,137 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
                   c.playlist[i].fileName.toLowerCase().contains(q))
                 i,
           ];
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 8, 6),
-                child: Row(
-                  children: [
-                    Text(
-                      'Playlist',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(width: 8),
-                    if (c.playlist.isNotEmpty)
-                      _Badge(text: '${c.playlist.length}'),
-                    const Spacer(),
-                    IconButton(
-                      tooltip: c.shuffle ? 'Shuffle on' : 'Shuffle off',
-                      isSelected: c.shuffle,
-                      icon: const Icon(Icons.shuffle),
-                      selectedIcon: const Icon(
-                        Icons.shuffle_on_outlined,
-                        color: Palette.accent,
-                      ),
-                      onPressed: c.toggleShuffle,
-                    ),
-                    PopupMenuButton<String>(
-                      tooltip: 'Playlist actions',
-                      icon: const Icon(Icons.more_vert),
-                      onSelected: (v) {
-                        if (v == 'files') widget.onAddFiles();
-                        if (v == 'folder') widget.onAddFolder();
-                        if (v == 'clear') c.clearPlaylist();
-                      },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(
-                          value: 'files',
-                          child: Text('Add files…'),
+          return LayoutBuilder(
+            builder: (context, box) {
+              // Short screens: title, search and actions share one row.
+              final compact = box.maxHeight < 480;
+              // Wide enough for one line per tune.
+              final dense = box.maxWidth >= 560;
+              final showSearch = c.playlist.isNotEmpty;
+              return Column(
+                children: [
+                  Padding(
+                    padding: compact
+                        ? const EdgeInsets.fromLTRB(8, 6, 4, 6)
+                        : const EdgeInsets.fromLTRB(16, 14, 8, 6),
+                    child: Row(
+                      children: [
+                        if (compact && showSearch)
+                          Expanded(child: _searchField())
+                        else
+                          Text(
+                            'Playlist',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        const SizedBox(width: 8),
+                        if (c.playlist.isNotEmpty)
+                          _Badge(text: '${c.playlist.length}'),
+                        if (!(compact && showSearch)) const Spacer(),
+                        IconButton(
+                          tooltip: c.shuffle ? 'Shuffle on' : 'Shuffle off',
+                          isSelected: c.shuffle,
+                          icon: const Icon(Icons.shuffle),
+                          selectedIcon: const Icon(
+                            Icons.shuffle_on_outlined,
+                            color: Palette.accent,
+                          ),
+                          onPressed: c.toggleShuffle,
                         ),
-                        PopupMenuItem(
-                          value: 'folder',
-                          child: Text('Add folder…'),
-                        ),
-                        PopupMenuDivider(),
-                        PopupMenuItem(
-                          value: 'clear',
-                          child: Text('Clear playlist'),
+                        PopupMenuButton<String>(
+                          tooltip: 'Playlist actions',
+                          icon: const Icon(Icons.more_vert),
+                          onSelected: (v) {
+                            if (v == 'files') widget.onAddFiles();
+                            if (v == 'folder') widget.onAddFolder();
+                            if (v == 'clear') c.clearPlaylist();
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'files',
+                              child: Text('Add files…'),
+                            ),
+                            PopupMenuItem(
+                              value: 'folder',
+                              child: Text('Add folder…'),
+                            ),
+                            PopupMenuDivider(),
+                            PopupMenuItem(
+                              value: 'clear',
+                              child: Text('Clear playlist'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              if (c.playlist.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                  child: TextField(
-                    controller: _search,
-                    onChanged: (v) => setState(() => _query = v),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: 'Search title, author or file',
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.close, size: 18),
-                              onPressed: () => setState(() {
-                                _search.clear();
-                                _query = '';
-                              }),
-                            ),
-                      filled: true,
-                      fillColor: Palette.background,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
                   ),
-                ),
-              const Divider(height: 1),
-              Expanded(
-                child: c.playlist.isEmpty
-                    ? _EmptyState(
-                        onAddFiles: widget.onAddFiles,
-                        onAddFolder: widget.onAddFolder,
-                      )
-                    : Scrollbar(
-                        controller: _scroll,
-                        child: ListView.builder(
-                          controller: _scroll,
-                          itemCount: indices.length,
-                          itemExtent: 56,
-                          itemBuilder: (context, row) {
-                            final i = indices[row];
-                            return _PlaylistRow(
-                              index: i,
-                              entry: c.playlist[i],
-                              isCurrent: i == c.currentIndex,
-                              isPlaying: i == c.currentIndex && c.playing,
-                              onTap: () {
-                                c.playIndex(i);
-                                widget.onPlayed?.call();
+                  if (showSearch && !compact)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: _searchField(),
+                    ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: c.playlist.isEmpty
+                        ? _EmptyState(
+                            onAddFiles: widget.onAddFiles,
+                            onAddFolder: widget.onAddFolder,
+                          )
+                        : Scrollbar(
+                            controller: _scroll,
+                            child: ListView.builder(
+                              controller: _scroll,
+                              itemCount: indices.length,
+                              itemExtent: dense ? 40 : 56,
+                              itemBuilder: (context, row) {
+                                final i = indices[row];
+                                return _PlaylistRow(
+                                  dense: dense,
+                                  index: i,
+                                  entry: c.playlist[i],
+                                  isCurrent: i == c.currentIndex,
+                                  isPlaying: i == c.currentIndex && c.playing,
+                                  onTap: () {
+                                    c.playIndex(i);
+                                    widget.onPlayed?.call();
+                                  },
+                                  onRemove: () => c.removeAt(i),
+                                );
                               },
-                              onRemove: () => c.removeAt(i),
-                            );
-                          },
-                        ),
-                      ),
-              ),
-            ],
+                            ),
+                          ),
+                  ),
+                ],
+              );
+            },
           );
         },
+      ),
+    );
+  }
+
+  Widget _searchField() {
+    return TextField(
+      controller: _search,
+      onChanged: (v) => setState(() => _query = v),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'Search title, author or file',
+        prefixIcon: const Icon(Icons.search, size: 20),
+        suffixIcon: _query.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: () => setState(() {
+                  _search.clear();
+                  _query = '';
+                }),
+              ),
+        filled: true,
+        fillColor: Palette.background,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }
@@ -176,8 +195,11 @@ class _PlaylistRow extends StatefulWidget {
     required this.isPlaying,
     required this.onTap,
     required this.onRemove,
+    this.dense = false,
   });
 
+  /// One line: number, title, author, subtunes (wide lists).
+  final bool dense;
   final int index;
   final PlaylistEntry entry;
   final bool isCurrent;
@@ -231,37 +253,68 @@ class _PlaylistRowState extends State<_PlaylistRow> {
                             ),
                           ),
                   ),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          e.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: titleColor,
-                            fontWeight: widget.isCurrent
-                                ? FontWeight.w600
-                                : FontWeight.w500,
-                          ),
+                  if (widget.dense) ...[
+                    Expanded(
+                      flex: 5,
+                      child: Text(
+                        e.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: titleColor,
+                          fontWeight: widget.isCurrent
+                              ? FontWeight.w600
+                              : FontWeight.w500,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          e.failed
-                              ? 'Cannot read ${e.fileName}'
-                              : (e.author.isEmpty ? e.fileName : e.author),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Palette.textMuted,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        e.failed
+                            ? 'Cannot read ${e.fileName}'
+                            : (e.author.isEmpty ? e.fileName : e.author),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Palette.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ] else
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            e.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: titleColor,
+                              fontWeight: widget.isCurrent
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            e.failed
+                                ? 'Cannot read ${e.fileName}'
+                                : (e.author.isEmpty ? e.fileName : e.author),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Palette.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   if (_hover)
                     IconButton(
                       tooltip: 'Remove from playlist',

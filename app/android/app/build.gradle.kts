@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -27,15 +29,57 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // The shared native core (libchipdeck.so): same CMake project and
+        // sources as the Windows chipdeck.dll. Only the library is built.
+        externalNativeBuild {
+            cmake {
+                arguments += listOf(
+                    "-DCHIPDECK_BUILD_CLI=OFF",
+                    "-DCHIPDECK_BUILD_TESTS=OFF",
+                    "-DANDROID_STL=c++_static",
+                )
+                targets += "chipdeck-shared"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("../../../CMakeLists.txt")
+        }
+    }
+
+    // Release signing. Android only installs an update over an existing
+    // install when both APKs are signed with the same key. With
+    // android/key.properties (never committed; CI writes it from repository
+    // secrets, see docs/HANDOVER.md) releases use that key; without it they
+    // fall back to the debug key, which differs between machines and CI runs.
+    val keyProps = rootProject.file("key.properties")
+    signingConfigs {
+        if (keyProps.exists()) {
+            create("release") {
+                val props = Properties()
+                keyProps.inputStream().use { props.load(it) }
+                storeFile = rootProject.file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (keyProps.exists()) "release" else "debug")
         }
     }
+}
+
+dependencies {
+    // Media notification, lock screen and headset controls (PlaybackService.kt).
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.media:media:1.7.0")
 }
 
 kotlin {

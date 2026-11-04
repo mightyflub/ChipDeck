@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../native/chipdeck_ffi.dart';
+import '../platform/second_screen.dart';
 import '../player/player_controller.dart';
 import 'theme.dart';
 import 'visualizer.dart';
@@ -19,13 +20,21 @@ class NowPlaying extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: controller,
+      listenable: Listenable.merge([controller, secondScreenActive]),
       builder: (context, _) {
         final c = controller;
+        // Controls on a second screen: leave them out here.
+        final remote = secondScreenActive.value;
         final info = c.info;
         final pad = compact ? 16.0 : 32.0;
         return LayoutBuilder(
           builder: (context, box) {
+            // Short, wide screens (phones and handhelds in landscape):
+            // details and controls on the left, visualiser on the right,
+            // all on one screen without scrolling.
+            if (box.maxHeight < 560 && box.maxWidth >= 560) {
+              return _Landscape(controller: c, info: info, remote: remote);
+            }
             return SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(pad, pad, pad, pad),
               child: ConstrainedBox(
@@ -41,9 +50,11 @@ class NowPlaying extends StatelessWidget {
                         Visualizer(controller: c, height: compact ? 140 : 190),
                         SizedBox(height: compact ? 16 : 24),
                         _Progress(controller: c),
-                        const SizedBox(height: 12),
-                        _Transport(controller: c),
-                        if (info != null && info.subtunes > 1) ...[
+                        if (!remote) ...[
+                          const SizedBox(height: 12),
+                          _Transport(controller: c),
+                        ],
+                        if (!remote && info != null && info.subtunes > 1) ...[
                           const SizedBox(height: 20),
                           _Subtunes(controller: c, info: info),
                         ],
@@ -56,6 +67,125 @@ class NowPlaying extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _Landscape extends StatelessWidget {
+  const _Landscape({
+    required this.controller,
+    required this.info,
+    required this.remote,
+  });
+  final PlayerController controller;
+  final TuneInfo? info;
+
+  /// Controls are on a second screen.
+  final bool remote;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    final i = info;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 11,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: _Header(controller: c, info: i, compact: true),
+                  ),
+                ),
+                if (!remote && i != null && i.subtunes > 1) ...[
+                  const SizedBox(height: 6),
+                  _SubtuneStrip(controller: c, info: i),
+                ],
+                const SizedBox(height: 8),
+                _Progress(controller: c),
+                if (!remote) _Transport(controller: c, dense: true),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(flex: 9, child: Visualizer(controller: c)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Subtune buttons in one scrollable row (landscape layout).
+class _SubtuneStrip extends StatefulWidget {
+  const _SubtuneStrip({required this.controller, required this.info});
+  final PlayerController controller;
+  final TuneInfo info;
+
+  @override
+  State<_SubtuneStrip> createState() => _SubtuneStripState();
+}
+
+class _SubtuneStripState extends State<_SubtuneStrip> {
+  final _scroll = ScrollController();
+
+  @override
+  void didUpdateWidget(_SubtuneStrip old) {
+    super.didUpdateWidget(old);
+    // Keep the current subtune in view when it changes.
+    if (old.info.currentSubtune != widget.info.currentSubtune &&
+        _scroll.hasClients) {
+      final x = (widget.info.currentSubtune - 1) * 44.0 - 80;
+      _scroll.animateTo(
+        x.clamp(0, _scroll.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final info = widget.info;
+    return SizedBox(
+      height: 34,
+      child: Row(
+        children: [
+          Text(
+            '${info.currentSubtune}/${info.subtunes}',
+            style: const TextStyle(
+              color: Palette.textMuted,
+              fontSize: 12,
+              fontFeatures: tabular,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ListView.separated(
+              controller: _scroll,
+              scrollDirection: Axis.horizontal,
+              itemCount: info.subtunes,
+              separatorBuilder: (_, _) => const SizedBox(width: 4),
+              itemBuilder: (_, k) => _SubtuneButton(
+                n: k + 1,
+                selected: k + 1 == info.currentSubtune,
+                isDefault: k + 1 == info.startSubtune,
+                onTap: () => widget.controller.selectSubtune(k + 1),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -236,8 +366,11 @@ class _Progress extends StatelessWidget {
 }
 
 class _Transport extends StatelessWidget {
-  const _Transport({required this.controller});
+  const _Transport({required this.controller, this.dense = false});
   final PlayerController controller;
+
+  /// Landscape: one row with smaller buttons; volume as a pop-up.
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -286,6 +419,20 @@ class _Transport extends StatelessWidget {
         );
         final volume = _Volume(controller: c);
         final advance = _AdvanceButton(controller: c);
+        if (dense) {
+          return Row(
+            children: [
+              advance,
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Transform.scale(scale: 0.85, child: buttons),
+                ),
+              ),
+              _VolumeButton(controller: c),
+            ],
+          );
+        }
         if (narrow) {
           return Column(
             children: [
@@ -374,6 +521,40 @@ class _Volume extends StatelessWidget {
           child: Slider(value: v, onChanged: controller.setVolume),
         ),
       ],
+    );
+  }
+}
+
+/// Volume icon that opens a slider (landscape layout, where a full-width
+/// slider does not fit).
+class _VolumeButton extends StatelessWidget {
+  const _VolumeButton({required this.controller});
+  final PlayerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = controller.volume;
+    return IconButton(
+      tooltip: 'Volume (+/-)',
+      icon: Icon(
+        v == 0
+            ? Icons.volume_off
+            : (v < 0.5 ? Icons.volume_down : Icons.volume_up),
+        color: Palette.textMuted,
+      ),
+      onPressed: () => showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Volume'),
+          content: SizedBox(
+            width: 320,
+            child: ListenableBuilder(
+              listenable: controller,
+              builder: (_, _) => _Volume(controller: controller),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

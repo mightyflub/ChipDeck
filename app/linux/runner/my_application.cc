@@ -52,7 +52,12 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "ChipDeck");
   }
 
-  gtk_window_set_default_size(window, 1280, 820);
+  // CHIPDECK_WINDOW=WxH sets the window size, e.g. 731x411 to check the
+  // layout of a phone or handheld in landscape (see docs/HANDOVER.md).
+  int win_w = 1280, win_h = 820;
+  const char* win_env = g_getenv("CHIPDECK_WINDOW");
+  if (win_env != nullptr) sscanf(win_env, "%dx%d", &win_w, &win_h);
+  gtk_window_set_default_size(window, win_w, win_h);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
