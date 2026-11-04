@@ -58,6 +58,18 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.''',
     );
+    yield const LicenseEntryWithLineBreaks(
+      ['libtfmxaudiodecoder'],
+      'libtfmxaudiodecoder 1.0.14 by Michael Schwendt (TFMX and Future '
+      'Composer). Free software under the GNU General Public License, '
+      'version 2 or later.',
+    );
+    yield const LicenseEntryWithLineBreaks(
+      ['TFMX-ST replay'],
+      'TFMX-ST playback is a C++ port of the TFMX-ST replay routine by Chris '
+      'Huelsbeck (1991-92), made from the 68000 source in Wanted Team\'s '
+      'TFMX ST EaglePlayer as distributed with UADE.',
+    );
     yield const LicenseEntryWithLineBreaks([
       'miniaudio',
     ], 'miniaudio 0.11.26 by David Reid. Public domain or MIT No Attribution.');

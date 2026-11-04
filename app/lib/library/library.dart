@@ -52,9 +52,12 @@ class LibraryTrack {
   String get kind {
     switch (system) {
       case TuneSystem.atariSt:
+        if (format.contains('TFMX')) return 'TFMX';
         final ext = p.extension(path).toLowerCase();
         return ext == '.ym' ? 'YM' : 'SNDH';
       case TuneSystem.amiga:
+        if (format.contains('Future Composer')) return 'FC';
+        if (format.contains('TFMX')) return 'TFMX';
         return 'MOD';
       case TuneSystem.pc:
         return 'XM';

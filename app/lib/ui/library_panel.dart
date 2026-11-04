@@ -225,7 +225,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
     (FormatFilter.all, 'All', 'All formats'),
     (FormatFilter.sid, 'C64', 'C64 SID'),
     (FormatFilter.atari, 'ST', 'Atari ST'),
-    (FormatFilter.modules, 'MOD', 'MOD / XM'),
+    (FormatFilter.modules, 'MOD', 'Amiga & PC: MOD, XM, TFMX, FC'),
   ];
 
   /// Everything on one row: search, format filter, match count and actions.

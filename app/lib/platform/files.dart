@@ -81,6 +81,18 @@ Future<List<String>> pickTuneFiles(BuildContext context) async {
       'ym',
       'mod',
       'xm',
+      'mdat',
+      'tfx',
+      'tfm',
+      'tfmx',
+      'hip',
+      'hipc',
+      'hip7',
+      'sog',
+      'fc',
+      'fc13',
+      'fc14',
+      'smod',
     ],
   );
   final files = await openFiles(acceptedTypeGroups: [group]);

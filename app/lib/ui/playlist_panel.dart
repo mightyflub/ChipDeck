@@ -390,7 +390,7 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Add .sid, .sndh, .ym, .mod or .xm files, or a whole folder such as your HVSC collection.',
+              'Add .sid, .sndh, .ym, .mod, .xm or TFMX (mdat.*) files, or a whole folder such as your HVSC collection.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Palette.textMuted),
             ),
