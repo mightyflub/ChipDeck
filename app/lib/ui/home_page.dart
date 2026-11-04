@@ -225,6 +225,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _raiseControlsButton() => IconButton(
+    tooltip: 'Show the controls on the second screen',
+    icon: const Icon(Icons.splitscreen),
+    onPressed: raiseSecondScreen,
+  );
+
   Widget _railBody() {
     return LayoutBuilder(
       builder: (context, box) => SingleChildScrollView(
@@ -247,6 +253,7 @@ class _HomePageState extends State<HomePage> {
               trailing: Column(
                 children: [
                   const SizedBox(height: 8),
+                  if (secondScreenActive.value) _raiseControlsButton(),
                   if (!secondScreenActive.value) ...[
                     IconButton(
                       tooltip: c.playing ? 'Pause' : 'Play',
@@ -340,6 +347,11 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       actions: [
+        ValueListenableBuilder<bool>(
+          valueListenable: secondScreenActive,
+          builder: (_, active, _) =>
+              active ? _raiseControlsButton() : const SizedBox.shrink(),
+        ),
         IconButton(
           tooltip: 'Add files',
           icon: const Icon(Icons.note_add_outlined),

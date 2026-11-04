@@ -56,6 +56,10 @@ class MainActivity : FlutterActivity() {
                 // Asked by Dart once it listens: a "secondScreen" message
                 // sent while Dart was still starting up can be lost.
                 "secondScreenShowing" -> result.success(secondScreen?.showing ?: false)
+                "raiseSecondScreen" -> {
+                    secondScreen?.raise()
+                    result.success(null)
+                }
                 "setSecondScreenEnabled" -> {
                     secondScreen?.enabled = call.arguments as? Boolean ?: true
                     result.success(null)
@@ -79,6 +83,13 @@ class MainActivity : FlutterActivity() {
     override fun onStart() {
         super.onStart()
         secondScreen?.start()
+    }
+
+    // Coming back to ChipDeck after using another app (for example one
+    // opened on the second screen over the controls): bring them back.
+    override fun onTopResumedActivityChanged(isTopResumedActivity: Boolean) {
+        super.onTopResumedActivityChanged(isTopResumedActivity)
+        if (isTopResumedActivity) secondScreen?.raise()
     }
 
     override fun onStop() {

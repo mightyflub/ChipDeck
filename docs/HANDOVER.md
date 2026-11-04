@@ -200,7 +200,9 @@ and `android_media.dart`). Setting: "Controls on second screen" (on by
 default). The controls show only while ChipDeck is in the foreground and
 on the main display (in the background the notification has the controls),
 and their window never takes key focus, so the handheld's buttons stay with
-the main screen. Working on the Ayn Thor since 0.4.0-test.52.
+the main screen. If another app covers the controls,
+they come back when ChipDeck becomes the top app again, or with the
+split-screen button in the rail (or title bar). Working on the Ayn Thor since 0.4.0-test.52.
 
 App features: playlist (files or whole folders, searchable, remembered
 between runs), now playing (title, author, released, PSID/RSID, 6581/8580,

@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.Display
 import android.view.WindowManager
@@ -34,6 +35,7 @@ class SecondScreen(
     private var channel: MethodChannel? = null
     private var presentation: ControlsPresentation? = null
     private var started = false
+    private var shownAt = 0L
 
     /** The user's setting ("Controls on second screen"). */
     var enabled = true
@@ -66,6 +68,18 @@ class SecondScreen(
 
     /** Whether the controls are showing on another display right now. */
     val showing: Boolean get() = presentation != null
+
+    /**
+     * Puts the controls back in front on the other display, after another
+     * app opened there covered them.
+     */
+    fun raise() {
+        if (!started || presentation == null) return
+        // Not right after showing them (start also counts as coming back).
+        if (SystemClock.uptimeMillis() - shownAt < 1000) return
+        hide()
+        refresh()
+    }
 
     /** Player state from the main engine, for the controls. */
     fun sendState(state: Any?) {
@@ -122,6 +136,7 @@ class SecondScreen(
             return
         }
         presentation = p
+        shownAt = SystemClock.uptimeMillis()
         e.lifecycleChannel.appIsResumed()
         main.invokeMethod("secondScreen", true)
     }

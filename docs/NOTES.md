@@ -284,3 +284,9 @@ both back. Now the controls come down when the activity stops and go up
 again when it starts, only when ChipDeck is on the main display, and their
 window is not focusable (touch still works).
 
+Third try (0.4.0-test.54): better, but the bottom screen "tends to lose
+focus" with no easy way back (most likely another app or the launcher
+covering the controls there). Added a button on the main screen that puts
+the controls back in front, and ChipDeck now does that by itself when it
+becomes the top app again (onTopResumedActivityChanged, Android 10+).
+
