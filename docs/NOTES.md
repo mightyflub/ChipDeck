@@ -357,3 +357,43 @@ Not tested on real digi tunes in the cloud (HVSC is blocked here); worth
 checking with e.g. a Mahoney or Galway digi tune on Stephen's devices.
 
 Stephen tried 0.5.0-test.61 on the Ayn Thor: "that works."
+
+
+## 2026-11-04: STIL tune info (0.6.0)
+
+Stephen asked for the full STIL info about the track and musician for SID
+tunes.
+
+Format (HVSC DOCUMENTS/STIL.txt, and BUGlist.txt which uses the same
+layout with BUG fields): entries start with an HVSC path line ("/MUSICIANS/
+H/Hubbard_Rob/Commando.sid", or a folder ending in "/"); fields are
+right-aligned names ("   TITLE:", "  ARTIST:", "  AUTHOR:", "    NAME:",
+" COMMENT:"); "(#n)" starts the fields for subtune n, fields before it are
+for the whole file; continuation lines are indented 9 spaces; a blank line
+ends an entry; "#" lines are comments. A subtune can list several TITLE/
+ARTIST groups (medleys and covers, with times in brackets). The files are
+ISO-8859-1. Folder entries hold the comments about a composer or group.
+
+Decisions:
+- Parsed in Dart, not the C++ core: it is plain text that only the UI
+  needs, and it keeps the core untouched while the MOD/XM work changes it.
+- Loaded in a background isolate into HVSC path (lower case) -> raw entry
+  text (~3 MB); an entry is parsed into fields only when looked up.
+- The HVSC path of a tune is its path relative to the folder holding
+  DOCUMENTS. If the tune lives elsewhere (another copy of HVSC), the path
+  from the last MUSICIANS/GAMES/DEMOS folder is used.
+- STIL.txt is found automatically: beside Songlengths.md5 (also for
+  existing installs that only have Songlengths set), or in a library
+  location's DOCUMENTS folder. BUGlist.txt is always read from beside it.
+- Display: current subtune first (it is what you are hearing), then the
+  whole-tune notes, known bugs, the folder comments (nearest first), then
+  the other subtunes folded away (tap one to play it). Deeper-indented
+  continuation lines keep their line breaks (lyrics, lists); others are
+  joined into one paragraph.
+- Landscape (Ayn Thor): the right panel switches between Scopes and Info
+  rather than squeezing text next to the scopes; the choice is
+  remembered. Taller layouts just add a section below the subtunes.
+
+Tests: app/test/stil_test.dart with a made-up STIL sample (CI now runs
+`flutter test` in the Linux job). Screenshots were made with a Flutter
+golden test on Linux using the same sample (not committed).

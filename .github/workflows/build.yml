@@ -111,6 +111,7 @@ jobs:
         run: |
           flutter pub get
           flutter analyze
+          flutter test
           flutter build linux --release --build-name=$CHIPDECK_VERSION --build-number=$CHIPDECK_BUILD --dart-define=CHIPDECK_VERSION=$CHIPDECK_VERSION
 
   # Quick check (seconds) that the Android signing secrets reach CI and

@@ -5,6 +5,7 @@ import '../native/chipdeck_ffi.dart';
 import '../platform/second_screen.dart';
 import '../player/player_controller.dart';
 import 'theme.dart';
+import 'tune_info.dart';
 import 'visualizer.dart';
 
 class NowPlaying extends StatelessWidget {
@@ -57,6 +58,20 @@ class NowPlaying extends StatelessWidget {
                         if (!remote && info != null && info.subtunes > 1) ...[
                           const SizedBox(height: 20),
                           _Subtunes(controller: c, info: info),
+                        ],
+                        if (hasStilSource(c) &&
+                            !(c.tuneStil?.isEmpty ?? true)) ...[
+                          const SizedBox(height: 24),
+                          Text(
+                            'TUNE INFO',
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
+                                  color: Palette.textMuted,
+                                  letterSpacing: 1.4,
+                                ),
+                          ),
+                          const SizedBox(height: 10),
+                          TuneInfoView(controller: c, scrollable: false),
                         ],
                       ],
                     ),
@@ -113,7 +128,23 @@ class _Landscape extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          Expanded(flex: 9, child: Visualizer(controller: c)),
+          Expanded(
+            flex: 9,
+            child: hasStilSource(c)
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      PanelSwitch(controller: c),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: c.showTuneInfo
+                            ? TuneInfoView(controller: c)
+                            : Visualizer(controller: c),
+                      ),
+                    ],
+                  )
+                : Visualizer(controller: c),
+          ),
         ],
       ),
     );
@@ -265,12 +296,40 @@ class _Header extends StatelessWidget {
               color: Palette.accent,
             ),
           ),
+        if (_stilTitle() case final title?) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(
+                Icons.music_note_rounded,
+                size: 16,
+                color: Palette.scope,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Palette.scope),
+                ),
+              ),
+            ],
+          ),
+        ],
         if ((i?.released ?? '').isNotEmpty) ...[
           const SizedBox(height: 4),
           Text(i!.released, style: const TextStyle(color: Palette.textMuted)),
         ],
       ],
     );
+  }
+
+  /// STIL title of the playing subtune (e.g. the song a cover is of).
+  String? _stilTitle() {
+    final sub = info?.currentSubtune;
+    if (sub == null) return null;
+    return controller.tuneStil?.titleFor(sub);
   }
 
   static String _shortFormat(String f) {
