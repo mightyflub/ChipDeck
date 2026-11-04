@@ -60,3 +60,32 @@ adopt GPL-2.0-or-later (or GPL-3.0) itself.
 - Step 2 UI: one cross-platform UI. Recommended **Flutter** (Windows +
   Android from one codebase, calls the C core via dart:ffi). Alternative:
   Qt 6/QML (C++ throughout, heavier Android tooling).
+
+## 2026-11-04: SNDH and YM engine evaluation
+
+Stephen linked https://github.com/arnaud-carre/sndh-player and asked for a
+plan (no code yet) for .sndh and .ym support. Full plan:
+[SNDH_YM_PLAN.md](SNDH_YM_PLAN.md).
+
+- **sndh-player** (v1.23, MIT, commit 770fc0c on 2026-11-04) is an ImGui/GLFW
+  desktop app for Windows and macOS. Its emulation lives in the
+  **AtariAudio** submodule (https://github.com/arnaud-carre/AtariAudio,
+  v1.27, MIT, commit f68f058 on 2026-10-29). The app itself is not reusable
+  as a library, but AtariAudio is designed to be.
+- **AtariAudio**: plays SNDH (ICE packed too, STE DAC, blitter) and all YM
+  variants (YM2 to YM6, MIX1, YMT1/2, LZH packed). C++17, ~14 source files,
+  no dependencies, no file I/O, no float, thread safe per instance, plain
+  CMake. Grepped sources: no OS headers, intrinsics or MSVC-only code, so
+  MSVC and Android NDK builds should be straightforward. Output is mono
+  16-bit at any sample rate. Used by BZR Player 2 and rePlayer.
+- **psgplay** (GPL-2.0, C): SNDH only, GNU make and GCC extensions, would need
+  a CMake/MSVC port plus our own ICE depacker. Kept as a fallback only.
+- **StSound** (MIT): deprecated by its author in favour of AtariAudio.
+- **ayumi** (MIT): AY/YM chip core only, no file formats or 68000. Useful
+  later for ZX Spectrum AY formats, not for SNDH/YM.
+- **Decision (proposed)**: AtariAudio for both SNDH and YM, replacing psgplay
+  in the earlier stack. Core gets a `Backend` interface + magic-byte probe so
+  SID and Atari backends sit side by side.
+- Could not compile-test AtariAudio in this session (building third-party
+  code was blocked in the cloud sandbox). First coding step should build it
+  with MSVC and the NDK.

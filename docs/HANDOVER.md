@@ -7,7 +7,7 @@ Detailed history and research live in [NOTES.md](NOTES.md).
 
 ChipDeck is a retro chiptune player for **Windows and Android**. First
 target: play C64 **.sid** files on Windows. Later: Android, then Atari ST
-**.sndh**, possibly more chip formats.
+**.sndh** and **.ym**, possibly more chip formats.
 
 ## Current state (2026-11-04)
 
@@ -15,6 +15,8 @@ target: play C64 **.sid** files on Windows. Later: Android, then Atari ST
 - Research done: SID engine options and a proposed stack (see below).
 - The repo Stephen linked (sakirhossn/SidPlayer) turned out to be an
   Electron video player with no SID code; not used.
+- SNDH/YM plan written: [SNDH_YM_PLAN.md](SNDH_YM_PLAN.md). Proposes
+  AtariAudio (from the sndh-player repo Stephen linked) for both formats.
 - **Waiting on Stephen** to approve the stack before building.
 
 ## Architecture (proposed)
@@ -23,7 +25,7 @@ target: play C64 **.sid** files on Windows. Later: Android, then Atari ST
 +-------------------+      +--------------------------------+
 | UI                |      | chipdeck-core (C++17, C API)   |
 | step 1: CLI       | ---> |  - libsidplayfp + reSIDfp (SID)|
-| step 2: Flutter   | FFI  |  - psgplay (SNDH, later)       |
+| step 2: Flutter   | FFI  |  - AtariAudio (SNDH+YM, later) |
 |   (Win+Android)   |      |  - miniaudio output            |
 +-------------------+      +--------------------------------+
 ```
@@ -37,6 +39,8 @@ target: play C64 **.sid** files on Windows. Later: Android, then Atari ST
 | Build system | CMake | Works with MSVC and the Android NDK |
 | License | GPL-2.0-or-later (pending) | Required by libsidplayfp |
 | UI | CLI first, then Flutter (pending) | Fast proof on Windows, one UI for both platforms |
+| SNDH + YM emulation | AtariAudio (pending) | MIT, no deps, one library for both formats; see SNDH_YM_PLAN.md |
+| Core structure | Backend interface + magic-byte probe | SID and Atari engines side by side, easy to add formats |
 
 ## How to build / run
 
@@ -47,8 +51,11 @@ Not applicable yet. Will be filled in with the first code.
 1. Stephen approves the stack (or picks Qt instead of Flutter).
 2. Add libsidplayfp and miniaudio as git submodules under `third_party/`.
 3. Write a CMake build for libsidplayfp (upstream uses autotools).
-4. Build `chipdeck-core` with the C API and a `chipdeck-cli` player.
+4. Build `chipdeck-core` with the C API and a `chipdeck-cli` player. Put the
+   `Backend` interface and format probe in from the start (SNDH_YM_PLAN.md,
+   milestone A1).
 5. Test on Windows (E:\Claude) with HVSC tunes, including an RSID digi tune
    and a 2SID tune.
 6. Add Songlengths.md5 support so tracks end on time.
-7. Then: Flutter UI, Android build, SNDH via psgplay.
+7. Then: SNDH and YM via AtariAudio (SNDH_YM_PLAN.md milestones A2 to A5),
+   Flutter UI, Android build.
