@@ -95,6 +95,23 @@ jobs:
           flutter analyze
           flutter build linux --release
 
+  # Quick check (seconds) that the Android signing secrets reach CI and
+  # unlock the keystore, without waiting for the full APK build.
+  android-signing-check:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - name: Check signing secrets
+        run: |
+          echo "ANDROID_KEYSTORE_BASE64: $([ -n "$KEYSTORE_BASE64" ] && echo set || echo missing)"
+          echo "ANDROID_KEYSTORE_PASSWORD: $([ -n "$KEYSTORE_PASSWORD" ] && echo set || echo missing)"
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then exit 0; fi
+          echo "$KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/k.jks"
+          keytool -list -keystore "$RUNNER_TEMP/k.jks" -storepass "$KEYSTORE_PASSWORD" | grep -iE "entry|chipdeck"
+          rm -f "$RUNNER_TEMP/k.jks"
+
   app-android:
     runs-on: ubuntu-latest
     env:
