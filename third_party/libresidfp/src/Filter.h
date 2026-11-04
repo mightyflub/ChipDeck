@@ -100,6 +100,19 @@ private:
     /// Current volume.
     uint8_t vol = 0;
 
+public:
+    /// ChipDeck patch: last output of each voice (before filter and volume),
+    /// for per-channel oscilloscopes.
+    float lastVoiceOut[3] = { 0.f, 0.f, 0.f };
+
+    /// ChipDeck patch: current master volume (0..15), the $D418 digi channel.
+    uint8_t volume4bit() const { return vol; }
+
+    /// ChipDeck patch: voice 3 silenced by the 3OFF bit (and not filtered).
+    bool voice3Silenced() const { return voice3off && !filt3; }
+
+private:
+
     /// Filter enabled.
     bool enabled = true;
 
@@ -219,6 +232,10 @@ uint16_t Filter::clock(Voice& voice1, Voice& voice2, Voice& voice3)
     const float wav1 = voice1.output();
     const float wav2 = voice2.output();
     const float wav3 = voice3.output();
+
+    lastVoiceOut[0] = wav1;
+    lastVoiceOut[1] = wav2;
+    lastVoiceOut[2] = wav3;
 
     // Envelope outputs
     const uint8_t env1 = voice1.envelope()->output();

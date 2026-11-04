@@ -88,6 +88,23 @@ int main()
     CHECK(cd_select_subtune(p, 3) != 0);
     CHECK(cd_select_subtune(p, 0) != 0);
 
+    // Per-channel scopes: YM A, B, C and the STE DAC; the tune uses A.
+    {
+        CHECK(cd_channel_count(p) == 4);
+        char name[16];
+        const char* expect[] = { "A", "B", "C", "DAC" };
+        for (int c = 0; c < 4; ++c)
+            CHECK(cd_channel_name(p, c, name, sizeof name) == 0 && std::strcmp(name, expect[c]) == 0);
+        std::vector<int16_t> buf(4 * 2048);
+        CHECK(cd_channel_scope(p, buf.data(), 2048) == 2048);
+        double e[4] = { 0, 0, 0, 0 };
+        for (int c = 0; c < 4; ++c)
+            for (int i = 0; i < 2048; ++i) e[c] += std::abs(double(buf[c * 2048 + i]));
+        std::printf("sndh channels: A %.0f B %.0f C %.0f DAC %.0f\n", e[0] / 2048, e[1] / 2048, e[2] / 2048, e[3] / 2048);
+        CHECK(e[0] / 2048 > 1000);
+        CHECK(e[1] / 2048 < 100 && e[2] / 2048 < 100 && e[3] / 2048 < 100);
+    }
+
     // SID register access is SID-only.
     uint8_t regs[32];
     CHECK(cd_get_sid_registers(p, 0, regs) != 0);
@@ -115,6 +132,7 @@ int main()
     CHECK(y1.rms > 1000);
     CHECK(near(y1.hz, 2000000.0 / (16 * 254), 6));
     CHECK(near(y2.hz, 2000000.0 / (16 * 190), 15));
+    CHECK(cd_channel_count(p) == 3);  // YM: A, B, C, no DAC
 
     // ------------------------------------------- switching back to SID works
     CHECK(cd_load_file(p, kSid.c_str(), 0) == 0);

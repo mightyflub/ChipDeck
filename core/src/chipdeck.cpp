@@ -37,6 +37,9 @@ namespace {
 // Emulate this many C64 cycles per engine call (~5 ms of audio on PAL).
 const unsigned int kCyclesPerChunk = 5000;
 
+// Per-channel history kept for cd_channel_scope().
+const size_t kChanRing = 4096;
+
 // Read a whole file, accepting UTF-8 paths on every platform.
 bool readFile(const char* path, std::vector<uint8_t>& out)
 {
@@ -116,6 +119,62 @@ struct cd_player
     size_t chunkPos = 0;       // next unread int16 in chunk
     bool ready = false;
 
+    // Per-channel output for visualisers (cd_channel_*).
+    int channels = 0;
+    std::vector<std::string> channelNames;
+    std::vector<int16_t> chanChunk;  // SID: `channels` values per chunk frame
+    std::vector<int16_t> chanTmp;    // Atari: `channels` values per frame
+    std::vector<int16_t> chanRing;   // kChanRing values per channel
+    size_t chanPos = 0;              // next write index in each ring
+    std::vector<float> dcIn, dcOut;  // DC blocker state per channel
+
+    void setChannels(std::vector<std::string> names)
+    {
+        channelNames = std::move(names);
+        channels = static_cast<int>(channelNames.size());
+        chanRing.assign(static_cast<size_t>(channels) * kChanRing, 0);
+        chanPos = 0;
+        dcIn.assign(static_cast<size_t>(channels), 0.f);
+        dcOut.assign(static_cast<size_t>(channels), 0.f);
+        chanChunk.clear();
+    }
+
+    // Append `frames` frames (`channels` values each) to the rings.
+    void pushChannels(const int16_t* src, size_t frames)
+    {
+        const size_t nc = static_cast<size_t>(channels);
+        if (nc == 0) return;
+        for (size_t i = 0; i < frames; ++i)
+        {
+            for (size_t k = 0; k < nc; ++k)
+            {
+                // One-pole DC blocker (~4 Hz at 48 kHz): silent channels and
+                // the constant volume of non-digi tunes settle at 0.
+                const float x = src[i * nc + k];
+                float y = x - dcIn[k] + 0.9995f * dcOut[k];
+                dcIn[k] = x;
+                dcOut[k] = y;
+                y = std::max(-32768.f, std::min(32767.f, y));
+                chanRing[k * kChanRing + chanPos] = static_cast<int16_t>(y);
+            }
+            chanPos = (chanPos + 1) % kChanRing;
+        }
+    }
+
+    void sidChannels()
+    {
+        int chips = tune ? static_cast<int>(tune->getInfo()->sidChips()) : 1;
+        chips = std::max(1, std::min(3, chips));
+        std::vector<std::string> names;
+        for (int c = 0; c < chips; ++c)
+        {
+            const std::string pre = chips > 1 ? std::to_string(c + 1) + ":" : "";
+            for (const char* n : { "V1", "V2", "V3", "Digi" })
+                names.push_back(pre + n);
+        }
+        setChannels(std::move(names));
+    }
+
     explicit cd_player(uint32_t rate) : sampleRate(rate) {}
 
     int fail(const std::string& msg)
@@ -165,6 +224,7 @@ struct cd_player
         engine.initMixer(true);
         chunk.clear();
         chunkPos = 0;
+        sidChannels();
         error.clear();
         ready = true;
         return 0;
@@ -176,7 +236,11 @@ struct cd_player
         ready = false;
         std::string err;
         atari = chipdeck::AtariTune::load(data, size, sampleRate, subtune, err);
-        if (!atari) return fail(err);
+        if (!atari) { setChannels({}); return fail(err); }
+        std::vector<std::string> names;
+        for (int c = 0; c < atari->channelCount(); ++c)
+            names.push_back(atari->channelName(c));
+        setChannels(std::move(names));
         error.clear();
         return 0;
     }
@@ -308,7 +372,7 @@ int cd_select_subtune(cd_player* p, int subtune)
     std::lock_guard<std::mutex> g(p->lock);
     if (p->atari)
     {
-        if (p->atari->select(subtune)) return 0;
+        if (p->atari->select(subtune)) { p->setChannels(p->channelNames); return 0; }
         p->error = "subtune out of range";
         return 1;
     }
@@ -356,7 +420,13 @@ size_t cd_render(cd_player* p, int16_t* out, size_t frames)
 {
     if (!p || !out) return 0;
     std::lock_guard<std::mutex> g(p->lock);
-    if (p->atari) return p->atari->render(out, frames);
+    if (p->atari)
+    {
+        p->chanTmp.resize(frames * static_cast<size_t>(p->channels));
+        size_t n = p->atari->render(out, frames, p->channels ? p->chanTmp.data() : nullptr);
+        p->pushChannels(p->chanTmp.data(), n);
+        return n;
+    }
     if (!p->ready) return 0;
 
     size_t want = frames * 2;  // int16 values
@@ -374,11 +444,29 @@ size_t cd_render(cd_player* p, int16_t* out, size_t frames)
                 ? p->engine.mix(p->chunk.data(), static_cast<unsigned>(samples)) : 0u;
             p->chunk.resize(n);
             p->chunkPos = 0;
+            // Per-voice samples, aligned with the chunk's frames.
+            const size_t nc = static_cast<size_t>(p->channels);
+            const size_t fr = n / 2;
+            p->chanChunk.assign(fr * nc, 0);
+            short* vb[3] = { nullptr, nullptr, nullptr };
+            if (nc > 0 && p->engine.info().numberOfSIDs() <= 3)
+            {
+                p->engine.voiceBuffers(vb);
+                for (size_t chip = 0; chip * 4 < nc; ++chip)
+                {
+                    if (!vb[chip]) continue;
+                    for (size_t i = 0; i < fr; ++i)
+                        for (size_t k = 0; k < 4; ++k)
+                            p->chanChunk[i * nc + chip * 4 + k] = vb[chip][i * 4 + k];
+                }
+            }
             if (n == 0 && ++emptyChunks > 1000) { p->fail("emulation produced no audio"); break; }
             continue;
         }
         size_t take = std::min(want - done, p->chunk.size() - p->chunkPos);
         std::memcpy(out + done, p->chunk.data() + p->chunkPos, take * sizeof(int16_t));
+        if (p->channels > 0 && p->chanChunk.size() >= (p->chunkPos + take) / 2 * p->channels)
+            p->pushChannels(p->chanChunk.data() + p->chunkPos / 2 * p->channels, take / 2);
         p->chunkPos += take;
         done += take;
     }
@@ -399,6 +487,38 @@ int cd_get_sid_registers(cd_player* p, int chip, uint8_t regs[32])
     std::lock_guard<std::mutex> g(p->lock);
     if (!p->ready) return 1;
     return p->engine.getSidStatus(static_cast<unsigned>(chip), regs) ? 0 : 1;
+}
+
+int cd_channel_count(cd_player* p)
+{
+    if (!p) return 0;
+    std::lock_guard<std::mutex> g(p->lock);
+    return (p->atari || p->ready) ? p->channels : 0;
+}
+
+int cd_channel_name(cd_player* p, int ch, char* out, size_t cap)
+{
+    if (!p || !out || cap == 0) return 1;
+    std::lock_guard<std::mutex> g(p->lock);
+    if (ch < 0 || ch >= p->channels) { out[0] = 0; return 1; }
+    copyStr(out, cap, p->channelNames[static_cast<size_t>(ch)].c_str());
+    return 0;
+}
+
+size_t cd_channel_scope(cd_player* p, int16_t* out, size_t frames)
+{
+    if (!p || !out) return 0;
+    std::lock_guard<std::mutex> g(p->lock);
+    if (frames > kChanRing) frames = kChanRing;
+    const size_t start = (p->chanPos + kChanRing - frames) % kChanRing;
+    for (size_t k = 0; k < static_cast<size_t>(p->channels); ++k)
+    {
+        const int16_t* ring = p->chanRing.data() + k * kChanRing;
+        int16_t* o = out + k * frames;
+        for (size_t i = 0; i < frames; ++i)
+            o[i] = ring[(start + i) % kChanRing];
+    }
+    return frames;
 }
 
 int cd_probe_file(const char* path, const char* songlengths_path, cd_info* out)

@@ -308,3 +308,50 @@ He then said a Windows test build isn't needed every time: the Windows
 app now builds only on main, tags and on request, and branch pushes no
 longer make a second run next to the pull request's.
 
+
+## 2026-11-04: Every channel in the visualiser (0.5.0)
+
+Stephen asked for the visualiser to show all channels of a tune,
+including digi drums on SID files. The Now playing visualiser now shows
+one oscilloscope per channel by default ("Channels"); the corner button
+switches back to the old mixed scope with SID voice tiles ("Mix"), and
+the choice is remembered (`channelScopes` preference).
+
+Channels per format:
+- SID: V1, V2, V3 and Digi per chip (2SID/3SID tunes get "2:V1" etc.,
+  up to 12 channels). V1-V3 are each voice's output (waveform x envelope)
+  before the filter and master volume, so filtered voices still show
+  clearly. Digi is the $D418 master volume nibble as a waveform: that is
+  where volume-register digis and drums (the classic 4-bit sample
+  technique, Mahoney's and others' variants) are heard. Digis that use
+  pulse width or the test bit play through a voice and show on that
+  voice's scope instead. Tiles also show each voice's note and waveform.
+- SNDH: YM2149 channels A, B, C and the STE DAC. YM: A, B, C (MIX1/YMT
+  files: one "Samples" channel). YM5/6 digidrums play through a YM
+  channel and show there.
+
+How: 
+- reSIDfp (patched, see third_party/README.md) records each voice's
+  output and the volume nibble whenever it produces an output sample,
+  into a 4-values-per-sample buffer next to the normal one;
+  libsidplayfp exposes it as `sidplayfp::voiceBuffers()`.
+- AtariAudio already had `AudioRenderWithVisualInfos` (one signed byte
+  per channel per sample, made for per-voice scopes); the core uses it.
+- The core keeps a 4096-sample ring per channel, filled as `cd_render`
+  hands out audio (so it matches what is heard, like the mixed scope),
+  with a ~4 Hz DC blocker so silent channels and the steady volume of
+  non-digi tunes sit at zero. New C API: `cd_channel_count`,
+  `cd_channel_name`, `cd_channel_scope`.
+- The app reads 2048 samples per channel each frame, triggers each scope
+  on a rising zero crossing and scales it with a slowly falling peak
+  (auto gain), so quiet channels are still visible.
+
+Tests: core_test checks the test tune shows on V1 only, and a tiny
+PSID built in the test that flips $D418 every frame shows on Digi only;
+atari_test checks the SNDH plays on channel A only and YM has 3 channels.
+Clean under AddressSanitizer. Screenshots:
+docs/screenshots/landscape-channels-sid.png (made-up 3-voice tune with a
+slow volume flip on Digi) and landscape-channels-sndh.png.
+
+Not tested on real digi tunes in the cloud (HVSC is blocked here); worth
+checking with e.g. a Mahoney or Galway digi tune on Stephen's devices.

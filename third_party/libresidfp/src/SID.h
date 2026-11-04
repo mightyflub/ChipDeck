@@ -98,6 +98,12 @@ private:
     /// Time until #voiceSync must be run.
     unsigned int nextVoiceSync;
 
+    /// ChipDeck patch: if set, clock(cycles, buf) also writes 4 values per
+    /// output sample here: voice 1..3 output and the master volume (digi).
+    int16_t* voiceTap = nullptr;
+
+    void writeVoiceTap(int s);
+
     unsigned int offset_6581;
 
     /// Currently active chip model.
@@ -258,6 +264,12 @@ public:
     void write(int offset, uint8_t value);
 
     /**
+     * ChipDeck patch: per-channel output for visualisers (see voiceTap).
+     * The buffer must hold 4 values for every sample clock() can produce.
+     */
+    void setVoiceTap(int16_t* tap) { voiceTap = tap; }
+
+    /**
      * Setting of SID sampling parameters.
      *
      * Use a clock freqency of 985248Hz for PAL C64, 1022730Hz for NTSC C64.
@@ -407,6 +419,23 @@ void SID::ageBusValue(int n)
 }
 
 RESIDFP_INLINE
+void SID::writeVoiceTap(int s)
+{
+    int16_t* t = voiceTap + s * 4;
+    for (int v = 0; v < 3; v++)
+    {
+        // DAC outputs are normalised (waveform about -0.5..0.5 after the
+        // offset, envelope 0..1); scale to 16 bits.
+        float x = filter->lastVoiceOut[v] * 48000.f;
+        if (v == 2 && filter->voice3Silenced()) x = 0.f;
+        x = x > 32767.f ? 32767.f : (x < -32768.f ? -32768.f : x);
+        t[v] = static_cast<int16_t>(x);
+    }
+    // Volume nibble 0..15 as a waveform (volume-register digis).
+    t[3] = static_cast<int16_t>((filter->volume4bit() * 2 - 15) * 2048);
+}
+
+RESIDFP_INLINE
 int SID::clock(unsigned int cycles, int16_t* buf)
 {
     assert(buf);
@@ -428,6 +457,7 @@ int SID::clock(unsigned int cycles, int16_t* buf)
                 int32_t output = clockFilt();
                 if (unlikely(resampler->input(output)))
                 {
+                    if (voiceTap) writeVoiceTap(s);
                     buf[s++] = resampler->getOutput(scaleFactor);
                 }
             }

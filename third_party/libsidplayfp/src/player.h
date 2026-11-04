@@ -138,6 +138,9 @@ public:
 
     void buffers(short** buffers) const;
 
+    // ChipDeck patch: per-voice buffers, see sidplayfp::voiceBuffers.
+    void voiceBuffers(short** buffers) const;
+
     int play(unsigned int cycles);
 
     uint_least32_t timeMs() const { return m_c64.getTimeMs() - m_startTime; }

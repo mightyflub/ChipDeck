@@ -100,6 +100,15 @@ public:
     void buffers(short** buffers) const;
 
     /**
+     * ChipDeck patch: per-voice buffer of each installed SID chip, 4 values
+     * per sample returned by #play(unsigned int): voice 1, 2, 3 output
+     * (before filter and volume) and the master volume as a waveform
+     * (volume-register digis). Entries are nullptr for emulations that do
+     * not provide it (only reSIDfp does). Read them before the next play().
+     */
+    void voiceBuffers(short** buffers) const;
+
+    /**
      * Run the emulation for selected number of cycles.
      * The value will be limited to a reasonable amount
      * if too large.

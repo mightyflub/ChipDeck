@@ -40,7 +40,12 @@ public:
     bool select(int subtune);
     void fillInfo(cd_info* out) const;
     // Interleaved stereo output (AtariAudio is mono; both channels equal).
-    size_t render(int16_t* out, size_t frames);
+    // If chans is not null it also gets channelCount() values per frame,
+    // one per chip channel (for per-channel oscilloscopes).
+    size_t render(int16_t* out, size_t frames, int16_t* chans = nullptr);
+    // Channels shown by visualisers: YM A, B, C (+ STE DAC for SNDH).
+    int channelCount() const { return static_cast<int>(chanBytes_.size()); }
+    const char* channelName(int ch) const;
     uint32_t positionMs() const;
 
 private:
@@ -50,6 +55,8 @@ private:
     int current_ = 1;
     uint64_t framesPlayed_ = 0;
     std::vector<int16_t> mono_;
+    std::vector<uint32_t> visual_;
+    std::vector<int> chanBytes_;  // byte of AtariAudio's visual info per channel
 };
 
 } // namespace chipdeck

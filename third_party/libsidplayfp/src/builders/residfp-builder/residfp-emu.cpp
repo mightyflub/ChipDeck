@@ -68,6 +68,7 @@ reSIDfpEmu::~reSIDfpEmu()
 {
     delete &m_sid;
     delete[] m_buffer;
+    delete[] m_voiceBuffer;
 }
 
 // Standard component options
@@ -94,6 +95,7 @@ void reSIDfpEmu::clock()
 {
     const event_clock_t cycles = eventScheduler->getTime(EVENT_CLOCK_PHI1) - m_accessClk;
     m_accessClk += cycles;
+    m_sid.setVoiceTap(m_voiceBuffer ? m_voiceBuffer + m_bufferpos * 4 : nullptr);
     m_bufferpos += m_sid.clock(cycles, m_buffer+m_bufferpos);
 }
 
@@ -129,6 +131,8 @@ void reSIDfpEmu::sampling(float systemclock, float freq,
     // 20ms buffer
     const int buffersize = std::ceil((freq / 1000.f) * 20.f);
     m_buffer = new short[buffersize];
+    delete[] m_voiceBuffer;
+    m_voiceBuffer = new short[buffersize * 4];
     m_status = true;
 }
 

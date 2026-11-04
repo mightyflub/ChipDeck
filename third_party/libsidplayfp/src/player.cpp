@@ -238,6 +238,14 @@ void Player::buffers(short** buffers) const
     }
 }
 
+void Player::voiceBuffers(short** buffers) const
+{
+    for (size_t i = 0; i < m_chips.size(); i++)
+    {
+        buffers[i] = m_chips[i]->voiceBuffer();
+    }
+}
+
 int Player::play(unsigned int cycles)
 {
     // Make sure a tune is loaded

@@ -67,6 +67,16 @@ std::unique_ptr<AtariTune> AtariTune::load(const uint8_t* data, size_t size,
     t->rate_ = sampleRate;
     t->renderer_ = AtariAudioRenderer::Create(data, static_cast<uint32_t>(size), sampleRate);
     if (!t->renderer_) { error = "not a valid SNDH or YM file"; return nullptr; }
+    // AtariAudio's visual info has one signed byte per channel per sample:
+    // YM A, B, C, then the STE DAC (or the sample channel of MIX1/YMT).
+    const AtariAudioRenderer::SongInfo& si = t->renderer_->GetSongInfo();
+    const char* fmt = si.fileFormat ? si.fileFormat : "";
+    if (si.fileType == AtariAudioRenderer::eFileType::eSndh)
+        t->chanBytes_ = { 0, 1, 2, 3 };
+    else if (std::strncmp(fmt, "YM ", 3) == 0)
+        t->chanBytes_ = { 0, 1, 2 };
+    else
+        t->chanBytes_ = { 3 };
     if (subtune <= 0) subtune = t->renderer_->GetSongInfo().defaultSubsong;
     if (subtune <= 0) subtune = 1;
     if (!t->select(subtune)) { error = "cannot start subtune"; return nullptr; }
@@ -110,10 +120,19 @@ void AtariTune::fillInfo(cd_info* out) const
     fill(*renderer_, current_, out);
 }
 
-size_t AtariTune::render(int16_t* out, size_t frames)
+const char* AtariTune::channelName(int ch) const
+{
+    if (ch < 0 || ch >= channelCount()) return "";
+    static const char* const kNames[] = { "A", "B", "C", "DAC" };
+    if (chanBytes_.size() == 1) return "Samples";
+    return kNames[chanBytes_[static_cast<size_t>(ch)]];
+}
+
+size_t AtariTune::render(int16_t* out, size_t frames, int16_t* chans)
 {
     const size_t kChunk = 4096;
     mono_.resize(kChunk);
+    if (chans) visual_.resize(kChunk);
     size_t done = 0;
     while (done < frames)
     {
@@ -121,7 +140,22 @@ size_t AtariTune::render(int16_t* out, size_t frames)
         // If the emulated 68000 player crashes, AtariAudio stops writing,
         // so clear first and the result is silence instead of garbage.
         std::fill(mono_.begin(), mono_.begin() + n, int16_t(0));
-        renderer_->AudioRender(mono_.data(), static_cast<uint32_t>(n));
+        if (chans)
+        {
+            std::fill(visual_.begin(), visual_.begin() + n, 0u);
+            renderer_->AudioRenderWithVisualInfos(mono_.data(), static_cast<uint32_t>(n),
+                                                  visual_.data());
+            const size_t nc = chanBytes_.size();
+            int16_t* c = chans + done * nc;
+            for (size_t i = 0; i < n; ++i)
+                for (size_t k = 0; k < nc; ++k)
+                {
+                    const int8_t v = static_cast<int8_t>(visual_[i] >> (chanBytes_[k] * 8));
+                    c[i * nc + k] = static_cast<int16_t>(v * 256);
+                }
+        }
+        else
+            renderer_->AudioRender(mono_.data(), static_cast<uint32_t>(n));
         int16_t* o = out + done * 2;
         for (size_t i = 0; i < n; ++i)
             o[i * 2] = o[i * 2 + 1] = mono_[i];

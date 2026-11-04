@@ -64,6 +64,10 @@ protected:
     /// Current position in buffer
     int m_bufferpos = 0;
 
+    /// ChipDeck patch: 4 values per sample in m_buffer (voices 1..3 and
+    /// the master volume), or nullptr if the emulation does not provide it.
+    short *m_voiceBuffer = nullptr;
+
     bool m_status = true;
     bool isLocked = false;
 
@@ -154,6 +158,11 @@ public:
      * Get the buffer.
      */
     short *buffer() const { return m_buffer; }
+
+    /**
+     * ChipDeck patch: per-voice buffer (4 values per sample), may be nullptr.
+     */
+    short *voiceBuffer() const { return m_voiceBuffer; }
 };
 
 }
