@@ -12,7 +12,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../native/chipdeck_ffi.dart';
 
 /// File extensions the core can play.
-const supportedExtensions = {'.sid', '.psid', '.rsid', '.mus', '.prg'};
+const supportedExtensions = {
+  '.sid', '.psid', '.rsid', '.mus', '.prg', // C64
+  '.sndh', '.snd', '.ym', // Atari ST
+};
 
 class PlaylistEntry {
   PlaylistEntry(this.path);

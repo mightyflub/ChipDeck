@@ -56,7 +56,14 @@ class _VisualizerState extends State<Visualizer> with SingleTickerProviderStateM
       });
       return;
     }
-    final chips = (c.info?.sidChips ?? 1).clamp(1, 3);
+    final sidChips = c.info?.sidChips ?? 1;
+    if (sidChips == 0) {
+      // Not a SID tune (e.g. Atari ST): no register view, scope only.
+      if (_voices.isNotEmpty) _voices = [];
+      setState(() => _samples = c.scope(1536));
+      return;
+    }
+    final chips = sidChips.clamp(1, 3);
     if (_voices.length != chips * 3) {
       _voices = List.generate(chips * 3, (_) => _VoiceState());
     }
@@ -115,8 +122,8 @@ class _VisualizerState extends State<Visualizer> with SingleTickerProviderStateM
           ),
         ),
       ),
-      const SizedBox(height: 12),
-      LayoutBuilder(builder: (context, box) {
+      if (_voices.isNotEmpty) const SizedBox(height: 12),
+      if (_voices.isNotEmpty) LayoutBuilder(builder: (context, box) {
         final perRow = box.maxWidth < 420 ? 3 : _voices.length.clamp(3, 9);
         final w = (box.maxWidth - (perRow - 1) * 8) / perRow;
         return Wrap(spacing: 8, runSpacing: 8, children: [

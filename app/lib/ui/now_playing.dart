@@ -79,11 +79,13 @@ class _Header extends StatelessWidget {
       _ => null,
     };
     final forced = controller.sidModel != SidModel.auto;
+    final isSid = (i?.sidChips ?? 1) > 0;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 6, runSpacing: 6, children: [
         if (i != null) _Chip(_shortFormat(i.format)),
-        if (model != null) _Chip(forced ? '$model (forced)' : model, highlight: true),
-        if (i != null) _Chip(i.isNtsc ? 'NTSC' : 'PAL'),
+        if (i != null && !isSid) const _Chip('Atari ST', highlight: true),
+        if (isSid && model != null) _Chip(forced ? '$model (forced)' : model, highlight: true),
+        if (i != null && isSid) _Chip(i.isNtsc ? 'NTSC' : 'PAL'),
         if (i != null && i.sidChips > 1) _Chip('${i.sidChips}SID', highlight: true),
       ]),
       const SizedBox(height: 12),

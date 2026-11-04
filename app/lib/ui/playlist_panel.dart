@@ -272,7 +272,7 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 12),
           Text('No tunes yet', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
-          const Text('Add .sid files, or a whole folder such as your HVSC collection.',
+          const Text('Add .sid, .sndh or .ym files, or a whole folder such as your HVSC collection.',
               textAlign: TextAlign.center, style: TextStyle(color: Palette.textMuted)),
           const SizedBox(height: 16),
           Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [

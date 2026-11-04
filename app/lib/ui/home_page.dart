@@ -47,8 +47,8 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> pickFiles() async {
     const group = XTypeGroup(
-      label: 'SID tunes',
-      extensions: ['sid', 'psid', 'rsid', 'mus', 'prg'],
+      label: 'Chiptunes',
+      extensions: ['sid', 'psid', 'rsid', 'mus', 'prg', 'sndh', 'snd', 'ym'],
     );
     final files = await openFiles(acceptedTypeGroups: [group]);
     if (files.isEmpty) return;
@@ -64,7 +64,7 @@ class _HomePageState extends State<HomePage> {
     final n = await c.addFolder(dir);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(n == 0 ? 'No SID files found in that folder.' : 'Added $n tunes.')));
+        SnackBar(content: Text(n == 0 ? 'No supported tunes found in that folder.' : 'Added $n tunes.')));
     if (c.current == null && n > 0) c.playIndex(start);
   }
 

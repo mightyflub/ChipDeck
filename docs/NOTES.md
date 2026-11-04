@@ -171,3 +171,9 @@ Stephen asked for "a command line player test like we did for the sid files".
   not installed in the container, so this could not be cross-checked there.
 - Could not run the Windows .exe in the container (no Wine); MinGW build
   links fine and CI runs the tests with MSVC.
+
+## 2026-11-04: App plays SNDH/YM too
+
+Merged the SNDH/YM thread (PR #1) into this branch. The app accepts
+.sndh/.snd/.ym, shows an "Atari ST" badge and hides the SID voice tiles
+when `sid_chips == 0` (scope only). SNDH files carry their own length.
