@@ -173,6 +173,13 @@ public:
     int clock(unsigned int cycles, short* buf);
 
     /**
+     * ChipDeck patch: also write 4 values per sample produced by
+     * clock(cycles, buf) into tap (voice 1..3, master volume), or stop
+     * when tap is nullptr.
+     */
+    void setVoiceTap(short* tap);
+
+    /**
      * Clock SID forward producing audio
      * using chosen output resampling algorithm.
      *

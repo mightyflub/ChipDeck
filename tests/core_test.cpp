@@ -35,6 +35,49 @@ static Stats render(cd_player* p, double seconds)
     return { got ? std::sqrt(sum / got) : 0.0, zc };
 }
 
+// RMS of each channel over the last `frames` samples (cd_channel_scope).
+static std::vector<double> channelRms(cd_player* p, size_t frames)
+{
+    const int n = cd_channel_count(p);
+    std::vector<int16_t> buf(static_cast<size_t>(n) * frames);
+    CHECK(cd_channel_scope(p, buf.data(), frames) == frames);
+    std::vector<double> rms;
+    for (int c = 0; c < n; ++c)
+    {
+        double sum = 0;
+        for (size_t i = 0; i < frames; ++i)
+        {
+            double v = buf[static_cast<size_t>(c) * frames + i];
+            sum += v * v;
+        }
+        rms.push_back(std::sqrt(sum / frames));
+    }
+    return rms;
+}
+
+// A tiny PSID whose play routine flips the $D418 volume between 7 and 15
+// every frame, like a (very slow) volume-register digi. No voices play.
+static std::vector<uint8_t> digiTune()
+{
+    std::vector<uint8_t> d(0x7C, 0);
+    auto be16 = [&](size_t at, unsigned v) { d[at] = uint8_t(v >> 8); d[at + 1] = uint8_t(v); };
+    std::memcpy(d.data(), "PSID", 4);
+    be16(4, 2); be16(6, 0x7C); be16(8, 0); be16(10, 0x1000); be16(12, 0x1006);
+    be16(14, 1); be16(16, 1);
+    std::memcpy(d.data() + 0x16, "Digi Test", 9);
+    const uint8_t code[] = {
+        0x00, 0x10,                    // load address $1000
+        0xA9, 0x0F, 0x8D, 0x18, 0xD4,  // init: LDA #$0F, STA $D418
+        0x60,                          // RTS
+        0xE6, 0xFB, 0xA5, 0xFB,        // play: INC $FB, LDA $FB
+        0x29, 0x01, 0x0A, 0x0A, 0x0A,  // AND #1, ASL x3 -> 0 or 8
+        0x09, 0x07, 0x8D, 0x18, 0xD4,  // ORA #7, STA $D418
+        0x60,                          // RTS
+    };
+    d.insert(d.end(), code, code + sizeof code);
+    return d;
+}
+
 int main()
 {
     std::printf("chipdeck %s\n", cd_version());
@@ -78,12 +121,41 @@ int main()
 
     CHECK(cd_select_subtune(p, 3) != 0);  // out of range
 
+    // Per-channel scopes: the test tune plays a pulse on voice 1 only.
+    {
+        CHECK(cd_channel_count(p) == 4);
+        char name[16];
+        const char* expect[] = { "V1", "V2", "V3", "Digi" };
+        for (int c = 0; c < 4; ++c)
+            CHECK(cd_channel_name(p, c, name, sizeof name) == 0 && std::strcmp(name, expect[c]) == 0);
+        CHECK(cd_channel_name(p, 4, name, sizeof name) != 0);
+        std::vector<double> r = channelRms(p, 4096);
+        std::printf("channels: V1 %.0f, V2 %.0f, V3 %.0f, Digi %.0f\n", r[0], r[1], r[2], r[3]);
+        CHECK(r[0] > 2000);
+        CHECK(r[1] < 50 && r[2] < 50 && r[3] < 50);
+    }
+
     // Loading from memory works too.
     std::ifstream f(kTune, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     CHECK(cd_load_memory(p, bytes.data(), bytes.size(), 2) == 0);
     CHECK(cd_get_info(p, &info) == 0 && info.current_subtune == 2);
     CHECK(render(p, 0.5).rms > 1000);
+
+    // Volume-register digis show up on the Digi channel.
+    {
+        std::vector<uint8_t> digi = digiTune();
+        CHECK(cd_load_memory(p, digi.data(), digi.size(), 0) == 0);
+        render(p, 0.5);
+        std::vector<double> r = channelRms(p, 4096);
+        CHECK(r.size() == 4);
+        if (r.size() == 4)
+        {
+            std::printf("digi tune: V1 %.0f, Digi %.0f\n", r[0], r[3]);
+            CHECK(r[3] > 2000);
+            CHECK(r[0] < 50);
+        }
+    }
 
     // Garbage data is rejected.
     const char junk[] = "this is not a sid file at all";

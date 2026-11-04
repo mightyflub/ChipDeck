@@ -1,7 +1,10 @@
-// Oscilloscope + per-voice SID activity, redrawn every frame while playing.
+// Visualiser, redrawn every frame while playing. Two views (button in the
+// corner, remembered): one oscilloscope per channel (SID voices + Digi,
+// Atari YM A/B/C + STE DAC), or the mixed output with SID voice tiles.
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -27,11 +30,35 @@ class _VoiceState {
   bool gate = false;
 }
 
+/// Colour of a channel by name: SID voices 1-3 and YM A-C use the voice
+/// colours, Digi/DAC/Samples the warm one.
+Color channelColor(String name) {
+  final n = name.contains(':') ? name.substring(name.indexOf(':') + 1) : name;
+  switch (n) {
+    case 'V1':
+    case 'A':
+      return Palette.voice[0];
+    case 'V2':
+    case 'B':
+      return Palette.voice[1];
+    case 'V3':
+    case 'C':
+      return Palette.voice[2];
+    default:
+      return Palette.warm;
+  }
+}
+
 class _VisualizerState extends State<Visualizer>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_onTick);
   Int16List _samples = Int16List(0);
   List<_VoiceState> _voices = List.generate(3, (_) => _VoiceState());
+
+  // Per-channel view.
+  List<String> _chanNames = const [];
+  List<Int16List> _chans = const [];
+  List<double> _peaks = const [];
 
   @override
   void initState() {
@@ -50,22 +77,45 @@ class _VisualizerState extends State<Visualizer>
     if (!c.playing) {
       // Let meters fall to rest, then stop repainting.
       final busy =
-          _voices.any((v) => v.level > 0.01) || _samples.any((s) => s != 0);
-      if (!busy) return;
+          _voices.any((v) => v.level > 0.01) ||
+          _samples.any((s) => s != 0) ||
+          _chans.isNotEmpty;
+      final names = c.channelNames;
+      if (!busy && listEquals(names, _chanNames)) return;
       setState(() {
         for (final v in _voices) {
           v.level *= 0.85;
           v.gate = false;
         }
         _samples = Int16List(0);
+        _chans = const [];
+        _chanNames = names;
       });
       return;
+    }
+    if (c.showChannels) {
+      _chanNames = c.channelNames;
+      _chans = c.channelScopes(2048);
+      if (_peaks.length != _chans.length) {
+        _peaks = List.filled(_chans.length, 0.0);
+      }
+      for (var i = 0; i < _chans.length; i++) {
+        var m = 0;
+        for (final s in _chans[i]) {
+          final a = s < 0 ? -s : s;
+          if (a > m) m = a;
+        }
+        // Auto gain: follow peaks up at once, fall back slowly.
+        _peaks[i] = math.max(m.toDouble(), _peaks[i] * 0.97);
+      }
+    } else if (_chans.isNotEmpty) {
+      _chans = const [];
     }
     final sidChips = c.info?.sidChips ?? 1;
     if (sidChips == 0) {
       // Not a SID tune (e.g. Atari ST): no register view, scope only.
       if (_voices.isNotEmpty) _voices = [];
-      setState(() => _samples = c.scope(1536));
+      setState(() => _samples = c.showChannels ? _samples : c.scope(1536));
       return;
     }
     final chips = sidChips.clamp(1, 3);
@@ -80,7 +130,7 @@ class _VisualizerState extends State<Visualizer>
         _decodeVoice(regs, v, clock, _voices[chip * 3 + v]);
       }
     }
-    setState(() => _samples = c.scope(1536));
+    setState(() => _samples = c.showChannels ? _samples : c.scope(1536));
   }
 
   static const _noteNames = [
@@ -126,6 +176,80 @@ class _VisualizerState extends State<Visualizer>
 
   @override
   Widget build(BuildContext context) {
+    final channels = widget.controller.showChannels;
+    return Stack(
+      children: [
+        channels ? _buildChannels(context) : _buildMix(context),
+        // Channel tiles have labels at the top; the mixed scope has none.
+        Positioned(
+          top: channels ? null : 6,
+          bottom: channels ? 4 : null,
+          right: channels ? 4 : 6,
+          child: _ModeButton(
+            channels: channels,
+            onPressed: widget.controller.toggleChannelScopes,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Voice state for SID channel [i] (chip * 4 + voice), or null for Digi
+  /// and non-SID channels.
+  _VoiceState? _voiceFor(int i) {
+    if ((widget.controller.info?.sidChips ?? 0) == 0) return null;
+    final k = i % 4;
+    if (k == 3) return null;
+    final v = (i ~/ 4) * 3 + k;
+    return v < _voices.length ? _voices[v] : null;
+  }
+
+  Widget _buildChannels(BuildContext context) {
+    final names = _chanNames.isEmpty
+        ? widget.controller.channelNames
+        : _chanNames;
+    final n = names.length;
+    if (n == 0) return _buildMix(context);
+    return LayoutBuilder(
+      builder: (context, box) {
+        const gap = 8.0;
+        final w = box.maxWidth;
+        // One row per SID chip when there is room; otherwise fewer columns.
+        var cols = n % 4 == 0 ? 4 : n;
+        final minW = n > 4 ? 100.0 : 110.0;
+        while (cols > 1 && (w - (cols - 1) * gap) / cols < minW) {
+          cols = cols == 4 ? 2 : (cols == 3 ? 1 : cols - 1);
+        }
+        final rows = (n + cols - 1) ~/ cols;
+        final tileW = (w - (cols - 1) * gap) / cols;
+        final double tileH;
+        if (box.hasBoundedHeight && widget.height == null) {
+          tileH = (box.maxHeight - (rows - 1) * gap) / rows;
+        } else {
+          tileH = rows == 1 ? (widget.height ?? 160) : 84;
+        }
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (var i = 0; i < n; i++)
+              SizedBox(
+                width: tileW,
+                height: tileH,
+                child: _ChannelTile(
+                  name: names[i],
+                  samples: i < _chans.length ? _chans[i] : null,
+                  peak: i < _peaks.length ? _peaks[i] : 0,
+                  voice: _voiceFor(i),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMix(BuildContext context) {
     final scope = Container(
       height: widget.height,
       decoration: BoxDecoration(
@@ -315,4 +439,197 @@ class _ScopePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ScopePainter old) => !identical(old.samples, samples);
+}
+
+/// Small corner button that switches between per-channel and mixed scopes.
+class _ModeButton extends StatelessWidget {
+  const _ModeButton({required this.channels, required this.onPressed});
+  final bool channels;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: channels ? 'Show mixed output' : 'Show every channel',
+      child: Material(
+        color: Palette.panelHigh.withValues(alpha: 0.85),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Palette.border),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  channels ? Icons.grid_view_rounded : Icons.show_chart,
+                  size: 14,
+                  color: Palette.textMuted,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  channels ? 'Channels' : 'Mix',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Palette.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One channel: name (and note/waveform for SID voices) over its scope.
+class _ChannelTile extends StatelessWidget {
+  const _ChannelTile({
+    required this.name,
+    required this.samples,
+    required this.peak,
+    required this.voice,
+  });
+  final String name;
+  final Int16List? samples;
+  final double peak;
+  final _VoiceState? voice;
+
+  @override
+  Widget build(BuildContext context) {
+    final col = channelColor(name);
+    final active = peak > 600;
+    final v = voice;
+    final label = name == 'Digi' || name.endsWith(':Digi')
+        ? name
+        : (RegExp(r'^[ABC]$').hasMatch(name) ? 'Ch $name' : name);
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF080912),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: active ? col.withValues(alpha: 0.55) : Palette.border,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: CustomPaint(painter: _ChannelPainter(samples, col, peak)),
+            ),
+            Positioned(
+              left: 8,
+              top: 5,
+              right: 8,
+              child: Row(
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: active ? col : Palette.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (v != null && v.note.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      v.note,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: col,
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: tabular,
+                      ),
+                    ),
+                  ],
+                  if (v != null) ...[
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        v.wave,
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Palette.textMuted,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChannelPainter extends CustomPainter {
+  _ChannelPainter(this.samples, this.color, this.peak);
+  final Int16List? samples;
+  final Color color;
+  final double peak;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final mid = size.height / 2 + 6; // leave room for the label
+    final half = size.height / 2 - 10;
+    final s = samples;
+    // Show about 21 ms: a cycle of a low bass note, readable treble.
+    final window = math.min(1024, (s?.length ?? 0) ~/ 2);
+    final path = Path();
+    if (s == null || window < 16) {
+      path
+        ..moveTo(0, mid)
+        ..lineTo(size.width, mid);
+    } else {
+      // Trigger on a rising zero crossing in the older half so the wave
+      // stands still; the window ends before the newest sample.
+      var start = s.length - window;
+      for (var i = s.length - window - 1; i > 0; i--) {
+        if (s[i - 1] < 0 && s[i] >= 0) {
+          start = i;
+          break;
+        }
+      }
+      // Auto gain; quiet noise stays small.
+      final scale = half * 0.9 / math.max(peak, 3000);
+      final step = math.max(1, window ~/ math.max(1, size.width.toInt()));
+      for (var i = 0; i < window; i += step) {
+        final x = size.width * i / (window - 1);
+        final y = (mid - s[start + i] * scale).clamp(1.0, size.height - 1);
+        if (i == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+      }
+    }
+    final glow = Paint()
+      ..color = color.withValues(alpha: 0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4;
+    final line = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(path, glow);
+    canvas.drawPath(path, line);
+  }
+
+  @override
+  bool shouldRepaint(_ChannelPainter old) =>
+      !identical(old.samples, samples) || old.color != color;
 }

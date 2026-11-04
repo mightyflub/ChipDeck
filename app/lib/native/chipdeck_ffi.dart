@@ -172,6 +172,21 @@ class ChipDeckNative {
             Int32 Function(Pointer<Void>, Int32, Pointer<Uint8>),
             int Function(Pointer<Void>, int, Pointer<Uint8>)
           >('cd_get_sid_registers'),
+      _channelCount = lib
+          .lookupFunction<
+            Int32 Function(Pointer<Void>),
+            int Function(Pointer<Void>)
+          >('cd_channel_count'),
+      _channelName = lib
+          .lookupFunction<
+            Int32 Function(Pointer<Void>, Int32, Pointer<Utf8>, Size),
+            int Function(Pointer<Void>, int, Pointer<Utf8>, int)
+          >('cd_channel_name'),
+      _channelScope = lib
+          .lookupFunction<
+            Size Function(Pointer<Void>, Pointer<Int16>, Size),
+            int Function(Pointer<Void>, Pointer<Int16>, int)
+          >('cd_channel_scope'),
       _probe = lib
           .lookupFunction<
             Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<CdInfoStruct>),
@@ -193,6 +208,9 @@ class ChipDeckNative {
   final int Function(Pointer<Void>, Pointer<CdInfoStruct>) _getInfo;
   final int Function(Pointer<Void>) _positionMs;
   final int Function(Pointer<Void>, int, Pointer<Uint8>) _sidRegs;
+  final int Function(Pointer<Void>) _channelCount;
+  final int Function(Pointer<Void>, int, Pointer<Utf8>, int) _channelName;
+  final int Function(Pointer<Void>, Pointer<Int16>, int) _channelScope;
   final int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<CdInfoStruct>)
   _probe;
 
@@ -237,6 +255,12 @@ class ChipDeckEngine {
   final Pointer<Int16> _scopeBuf = calloc<Int16>(4096);
   final Pointer<Uint8> _regBuf = calloc<Uint8>(32);
   final Pointer<CdInfoStruct> _infoBuf = calloc<CdInfoStruct>();
+  final Pointer<Int16> _chanBuf = calloc<Int16>(maxChannels * 4096);
+  final Pointer<Utf8> _nameBuf = calloc<Uint8>(32).cast();
+  List<String> _channelNames = const [];
+
+  /// Most channels a tune can have (3 SIDs x 4); CD_MAX_CHANNELS in C.
+  static const maxChannels = 12;
 
   /// Returns null if no audio device could be opened.
   static ChipDeckEngine? create() {
@@ -257,9 +281,13 @@ class ChipDeckEngine {
     (a) => _n._loadSonglengths(_player, path.toNativeUtf8(allocator: a)) == 0,
   );
 
-  bool load(String path, {int subtune = 0}) => using(
-    (a) => _n._loadFile(_player, path.toNativeUtf8(allocator: a), subtune) == 0,
-  );
+  bool load(String path, {int subtune = 0}) {
+    _channelNames = const [];
+    return using(
+      (a) =>
+          _n._loadFile(_player, path.toNativeUtf8(allocator: a), subtune) == 0,
+    );
+  }
 
   bool selectSubtune(int subtune) => _n._selectSubtune(_player, subtune) == 0;
 
@@ -275,6 +303,35 @@ class ChipDeckEngine {
     return Int16List.fromList(_scopeBuf.asTypedList(got));
   }
 
+  /// Names of the tune's channels ("V1".."V3", "Digi", "2:V1"... for SID;
+  /// "A", "B", "C", "DAC" for Atari), empty if nothing is loaded.
+  List<String> get channelNames {
+    final n = _n._channelCount(_player).clamp(0, maxChannels);
+    if (n != _channelNames.length) {
+      _channelNames = [
+        for (var i = 0; i < n; i++)
+          _n._channelName(_player, i, _nameBuf, 32) == 0
+              ? _nameBuf.toDartString()
+              : '${i + 1}',
+      ];
+    }
+    return _channelNames;
+  }
+
+  /// Latest [frames] samples of every channel (newest last), one list per
+  /// channel, in the order of [channelNames].
+  List<Int16List> channelScopes(int frames) {
+    final n = channelNames.length;
+    if (n == 0) return const [];
+    frames = frames.clamp(1, 4096);
+    final got = _n._channelScope(_player, _chanBuf, frames);
+    final all = _chanBuf.asTypedList(n * frames);
+    return [
+      for (var c = 0; c < n; c++)
+        Int16List.fromList(all.sublist(c * frames, c * frames + got)),
+    ];
+  }
+
   /// SID registers of chip [chip], or null if unavailable.
   Uint8List? sidRegisters(int chip) => _n._sidRegs(_player, chip, _regBuf) == 0
       ? Uint8List.fromList(_regBuf.asTypedList(32))
@@ -285,5 +342,7 @@ class ChipDeckEngine {
     calloc.free(_scopeBuf);
     calloc.free(_regBuf);
     calloc.free(_infoBuf);
+    calloc.free(_chanBuf);
+    calloc.free(_nameBuf);
   }
 }

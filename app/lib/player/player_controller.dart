@@ -93,6 +93,9 @@ class PlayerController extends ChangeNotifier {
   AdvanceMode advanceMode = AdvanceMode.subtunesThenNext;
   bool shuffle = false;
 
+  /// Visualiser shows one scope per channel (true) or the mixed output.
+  bool showChannels = true;
+
   Timer? _ticker;
 
   /// Called after the user picks a different Songlengths file.
@@ -123,6 +126,7 @@ class PlayerController extends ChangeNotifier {
           AdvanceMode.values.length - 1,
         )];
     shuffle = _prefs.getBool('shuffle') ?? false;
+    showChannels = _prefs.getBool('channelScopes') ?? true;
     final e = _engine;
     if (e != null) {
       e.volume = volume;
@@ -411,6 +415,15 @@ class PlayerController extends ChangeNotifier {
   // ------------------------------------------------------- visual data
   Int16List scope(int frames) => _engine?.scope(frames) ?? Int16List(0);
   Uint8List? sidRegisters(int chip) => _engine?.sidRegisters(chip);
+  List<String> get channelNames => _engine?.channelNames ?? const [];
+  List<Int16List> channelScopes(int frames) =>
+      _engine?.channelScopes(frames) ?? const [];
+
+  void toggleChannelScopes() {
+    showChannels = !showChannels;
+    _prefs.setBool('channelScopes', showChannels);
+    notifyListeners();
+  }
 
   void _ensureTicker() {
     _ticker ??= Timer.periodic(

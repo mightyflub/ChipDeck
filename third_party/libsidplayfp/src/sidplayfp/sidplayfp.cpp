@@ -56,6 +56,11 @@ void sidplayfp::buffers(short** buffers) const
     sidplayer.buffers(buffers);
 }
 
+void sidplayfp::voiceBuffers(short** buffers) const
+{
+    sidplayer.voiceBuffers(buffers);
+}
+
 int sidplayfp::play(unsigned int cycles)
 {
     return sidplayer.play(cycles);

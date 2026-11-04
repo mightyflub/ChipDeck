@@ -115,6 +115,11 @@ int residfp::clock(unsigned int cycles, short* buf)
     return sid.clock(cycles, buf);
 }
 
+void residfp::setVoiceTap(short* tap)
+{
+    sid.setVoiceTap(tap);
+}
+
 int residfp::clock( short* buf, int bufSize)
 {
     return sid.clock(buf, bufSize);

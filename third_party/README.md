@@ -15,7 +15,25 @@ replaces the upstream autotools build and generates the few `*.h.in` headers.
 Only `src/` plus license/readme files were copied. Removed from libsidplayfp:
 the exSID and USBSID hardware builders (we only emulate) and the Makefiles.
 
+## Local patches (ChipDeck)
+
+Per-channel oscilloscopes need data the libraries do not expose. All
+changes are marked "ChipDeck patch" in the source; re-apply them after an
+upgrade (`grep -rn "ChipDeck patch" third_party`):
+
+- libresidfp `Filter.h`: keep the last output of each voice
+  (`lastVoiceOut`), and accessors for the volume nibble and voice 3 off.
+- libresidfp `SID.h`, `residfp/residfp.h/.cpp`: optional voice tap
+  (`setVoiceTap`); `clock(cycles, buf)` writes voice 1-3 and the volume
+  nibble (as a waveform) for every output sample.
+- libsidplayfp `sidemu.h`, `builders/residfp-builder/residfp-emu.cpp`:
+  a per-voice buffer next to the sample buffer, passed as the tap.
+- libsidplayfp `player.h/.cpp`, `sidplayfp/sidplayfp.h/.cpp`:
+  `voiceBuffers()` returns those buffers, like `buffers()`.
+
+AtariAudio is unchanged (its `AudioRenderWithVisualInfos` is enough).
+
 Upgrading: download the new tarballs, replace `src/`, update the version
 numbers in `CMakeLists.txt` (here) and in `core/src/chipdeck.cpp`
 (`cd_version`), compare the source lists against upstream `Makefile.am`,
-then run the tests.
+re-apply the local patches above, then run the tests.

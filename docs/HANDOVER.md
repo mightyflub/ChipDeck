@@ -37,8 +37,8 @@ and the version is given whenever a build is shared.
 
 - The base version is `version:` in `app/pubspec.yaml` (MAJOR.MINOR.PATCH;
   the `+N` there is ignored by CI). Bump it when a release goes out.
-- CI (`tools/ci-version.sh`) makes `0.4.0-test.<run number>` for every
-  build, and `0.4.0` for a `v0.4.0` tag (the tag must match pubspec). The
+- CI (`tools/ci-version.sh`) makes `0.5.0-test.<run number>` for every
+  build, and `0.5.0` for a `v0.5.0` tag (the tag must match pubspec). The
   run number is also the Android versionCode and the Windows build number,
   so every APK installs over the previous one.
 - Builds made by hand without `--dart-define=CHIPDECK_VERSION=...` show
@@ -49,6 +49,14 @@ and the version is given whenever a build is shared.
   "windows" ticked. Pushes to other branches without a PR build nothing.
 
 ## Current state (2026-11-04)
+
+- **Per-channel visualiser (0.5.0, branch claude/project-thread-cc200r):**
+  Now playing shows one oscilloscope per channel: SID V1-V3 + Digi (the
+  $D418 volume digis/drums) per chip, SNDH A/B/C + STE DAC, YM A/B/C.
+  The corner button switches to the old mixed scope ("Mix"). Same code on
+  Windows and Android. Needs vendored-library patches, listed in
+  third_party/README.md. Details in NOTES.md (2026-11-04, Every channel).
+  Stephen confirmed it works on the Ayn Thor (0.5.0-test.61, 2026-11-04).
 
 - **Android app (branch claude/project-thread-ryqtet, PR #3):** same Flutter
   app and core as Windows, built as an APK in CI (`app-android` job,
@@ -121,6 +129,10 @@ docs/                     HANDOVER.md (this), NOTES.md (log)
 - The core only produces PCM (int16 stereo, 48 kHz in the CLI); the app
   owns the audio device. Every core call is mutex-locked so `cd_render()`
   can run on the audio thread while the UI changes subtunes.
+- Per-channel data for the visualiser: `cd_channel_count/name/scope`.
+  The core keeps a ring per channel, filled by `cd_render`. SID data comes
+  from a small patch to reSIDfp/libsidplayfp (`sidplayfp::voiceBuffers`),
+  Atari data from AtariAudio's `AudioRenderWithVisualInfos`.
 - Format choice: `cd_load_file/memory` and `cd_probe_file` check magic
   bytes (`chipdeck::isAtariTune`); Atari tunes go to `chipdeck::AtariTune`
   (`core/src/atari_backend.cpp`), everything else to libsidplayfp. For
@@ -225,8 +237,10 @@ split-screen button in the rail (or title bar). Working on the Ayn Thor since 0.
 
 App features: playlist (files or whole folders, searchable, remembered
 between runs), now playing (title, author, released, PSID/RSID, 6581/8580,
-PAL/NTSC, 2SID/3SID), oscilloscope, per-voice activity (waveform, note,
-level), progress with Songlengths support, transport, subtune picker,
+PAL/NTSC, 2SID/3SID), visualiser with one scope per channel (SID voices +
+Digi, Atari YM channels + STE DAC; `lib/ui/visualizer.dart`, data from
+`cd_channel_scope`) or the mixed scope with per-voice activity (waveform,
+note, level), progress with Songlengths support, transport, subtune picker,
 volume, auto-advance modes (all subtunes then next, next tune, repeat),
 shuffle, settings (SID model, Songlengths.md5, default length).
 Keys: Space play/pause, Left/Right subtune, N/P tune, +/- volume.

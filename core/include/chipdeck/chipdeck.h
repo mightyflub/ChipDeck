@@ -99,6 +99,29 @@ CD_API uint32_t cd_position_ms(cd_player* p);
  * Returns 0 on success. Register layout is the C64 SID ($D400-$D41F). */
 CD_API int cd_get_sid_registers(cd_player* p, int chip, uint8_t regs[32]);
 
+/* ---------------------------------------------------------------------
+ * Per-channel output, for visualisers (one oscilloscope per channel).
+ * SID: per chip "V1", "V2", "V3" (each voice before filter and volume)
+ * and "Digi" (the $D418 master volume, which volume-register digis and
+ * drums play through); with 2 or 3 chips the names get a "2:"/"3:" prefix.
+ * SNDH: "A", "B", "C" (YM2149) and "DAC" (STE DMA sound). YM: "A", "B",
+ * "C". The data follows cd_render(), so it matches what is being heard.
+ * Values are DC-blocked so silent channels sit at 0.
+ * --------------------------------------------------------------------- */
+#define CD_MAX_CHANNELS 12
+
+/* Number of channels of the loaded tune (0 if none). */
+CD_API int cd_channel_count(cd_player* p);
+
+/* Copy channel `ch`'s name (UTF-8, NUL-terminated) into out. 0 on success. */
+CD_API int cd_channel_name(cd_player* p, int ch, char* out, size_t cap);
+
+/* Copy the most recent `frames` samples of every channel, channel after
+ * channel (out[ch * frames + i], newest last). out must hold
+ * cd_channel_count() * frames values; frames is capped at 4096.
+ * Returns frames copied per channel. */
+CD_API size_t cd_channel_scope(cd_player* p, int16_t* out, size_t frames);
+
 /* Read a tune's metadata without creating a player (fast, for file lists).
  * songlengths_path may be NULL. Returns 0 on success. */
 CD_API int cd_probe_file(const char* path, const char* songlengths_path,
