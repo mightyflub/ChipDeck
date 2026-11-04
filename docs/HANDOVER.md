@@ -27,9 +27,9 @@ target: play C64 **.sid** files on Windows. Also Atari ST **.sndh** and
   claude/project-thread-lu47hk, 2026-11-04):** chipdeck-core plays Atari
   ST .sndh and .ym files through vendored AtariAudio 1.27, behind the same
   C API (`cd_load_*`, `cd_get_info`, `cd_render`, subtunes, `cd_probe_file`).
-  The shared library and so the Flutter app pick it up automatically; the
-  app's file filters still need .sndh/.ym. Not yet tried with real SNDH
-  archive tunes (only our own generated test tunes). Plan and engine
+  The shared library and so the Flutter app pick it up automatically, and
+  the app accepts .sndh/.snd/.ym. The CLI build was confirmed working on
+  Stephen's Windows PC (2026-11-04). Plan and engine
   comparison: [SNDH_YM_PLAN.md](SNDH_YM_PLAN.md).
 - The SNDH/YM thread owns `core/src/chipdeck.cpp` and `atari_backend.*`;
   coordinate before editing those files.
