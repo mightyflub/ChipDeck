@@ -53,6 +53,9 @@ class MainActivity : FlutterActivity() {
                     secondScreen?.sendState(call.arguments)
                     result.success(null)
                 }
+                // Asked by Dart once it listens: a "secondScreen" message
+                // sent while Dart was still starting up can be lost.
+                "secondScreenShowing" -> result.success(secondScreen?.showing ?: false)
                 "setSecondScreenEnabled" -> {
                     secondScreen?.enabled = call.arguments as? Boolean ?: true
                     result.success(null)

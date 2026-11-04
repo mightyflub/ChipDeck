@@ -59,6 +59,9 @@ class SecondScreen(
         channel = null
     }
 
+    /** Whether the controls are showing on another display right now. */
+    val showing: Boolean get() = presentation != null
+
     /** Player state from the main engine, for the controls. */
     fun sendState(state: Any?) {
         channel?.invokeMethod("state", state)

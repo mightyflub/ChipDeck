@@ -31,6 +31,13 @@ class AndroidMedia {
     );
     secondScreenEnabled.addListener(sendEnabled);
     sendEnabled();
+    // The controls may already be showing: Android puts them up while this
+    // engine is still starting, and a message sent before the handler above
+    // existed can be dropped (the channel only buffers one). Ask instead.
+    _channel.invokeMethod<bool>('secondScreenShowing').then((showing) {
+      secondScreenActive.value = showing == true;
+      m._syncControls();
+    });
   }
 
   /// Sends the player state to the second-screen controls, if showing.
