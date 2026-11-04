@@ -42,6 +42,14 @@ typedef enum cd_sid_model {
     CD_SID_8580 = 2
 } cd_sid_model;
 
+/* The machine a tune was written for (cd_info.system). */
+typedef enum cd_system {
+    CD_SYSTEM_C64 = 0,      /* .sid etc. via libsidplayfp */
+    CD_SYSTEM_ATARI_ST = 1, /* .sndh / .ym via AtariAudio */
+    CD_SYSTEM_AMIGA = 2,    /* .mod (and other Amiga modules) via libxmp */
+    CD_SYSTEM_PC = 3        /* PC tracker modules: .xm (Fasttracker 2) via libxmp */
+} cd_system;
+
 typedef struct cd_info {
     char title[64];
     char author[64];
@@ -50,10 +58,11 @@ typedef struct cd_info {
     int subtunes;         /* number of subtunes, >= 1 */
     int start_subtune;    /* 1-based default subtune */
     int current_subtune;  /* 1-based */
-    int sid_chips;        /* 1, 2 or 3 */
+    int sid_chips;        /* 1, 2 or 3; 0 for tunes that are not SID */
     int sid_model;        /* cd_sid_model actually in use for chip 1 */
     int is_ntsc;          /* 1 if the tune runs at NTSC speed */
     int32_t length_ms;    /* from Songlengths database, or -1 if unknown */
+    int system;           /* cd_system; added in 0.6.0 (Dart maps this struct) */
 } cd_info;
 
 /* Library version string, e.g. "0.1.0 (libsidplayfp 3.1.2)". */
@@ -105,10 +114,11 @@ CD_API int cd_get_sid_registers(cd_player* p, int chip, uint8_t regs[32]);
  * and "Digi" (the $D418 master volume, which volume-register digis and
  * drums play through); with 2 or 3 chips the names get a "2:"/"3:" prefix.
  * SNDH: "A", "B", "C" (YM2149) and "DAC" (STE DMA sound). YM: "A", "B",
- * "C". The data follows cd_render(), so it matches what is being heard.
+ * "C". Modules (.mod, .xm): one per tracker channel, "1", "2", ... (4 for
+ * a classic Amiga MOD, up to 32 for .xm; CD_MAX_CHANNELS). The data follows cd_render(), so it matches what is being heard.
  * Values are DC-blocked so silent channels sit at 0.
  * --------------------------------------------------------------------- */
-#define CD_MAX_CHANNELS 12
+#define CD_MAX_CHANNELS 32
 
 /* Number of channels of the loaded tune (0 if none). */
 CD_API int cd_channel_count(cd_player* p);

@@ -40,6 +40,7 @@ void fill(const AtariAudioRenderer& r, int current, cd_info* out)
     out->current_subtune = current;
     // SID-only fields stay 0 (sid_chips == 0 means "not a SID tune").
     out->length_ms = durationMs(r, current);
+    out->system = CD_SYSTEM_ATARI_ST;
 }
 
 } // namespace

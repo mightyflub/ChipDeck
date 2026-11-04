@@ -14,7 +14,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../native/chipdeck_ffi.dart';
-import '../player/player_controller.dart' show supportedExtensions;
+import '../player/player_controller.dart' show isSupportedFile;
 
 class LibraryTrack {
   LibraryTrack({
@@ -28,6 +28,7 @@ class LibraryTrack {
     required this.size,
     required this.mtime,
     required this.sidChips,
+    required this.system,
   });
 
   final String path;
@@ -39,7 +40,8 @@ class LibraryTrack {
   final int lengthMs; // -1 if unknown
   final int size;
   final int mtime; // ms since epoch
-  final int sidChips; // 0 for non-SID (Atari)
+  final int sidChips; // 0 for non-SID (Atari, modules)
+  final TuneSystem system;
 
   String get fileName => p.basename(path);
   String get displayTitle =>
@@ -47,12 +49,20 @@ class LibraryTrack {
 
   /// Short format label for badges.
   String get kind {
-    if (sidChips == 0) {
-      final ext = p.extension(path).toLowerCase();
-      return ext == '.ym' ? 'YM' : 'SNDH';
+    switch (system) {
+      case TuneSystem.atariSt:
+        final ext = p.extension(path).toLowerCase();
+        return ext == '.ym' ? 'YM' : 'SNDH';
+      case TuneSystem.amiga:
+        return 'MOD';
+      case TuneSystem.pc:
+        return 'XM';
+      case TuneSystem.c64:
+        return format.contains('RSID') ? 'RSID' : 'SID';
     }
-    return format.contains('RSID') ? 'RSID' : 'SID';
   }
+
+  bool get isModule => system == TuneSystem.amiga || system == TuneSystem.pc;
 
   late final String _blob =
       '$title\n$author\n$released\n${p.basename(path)}\n${p.basename(p.dirname(path))}'
@@ -77,6 +87,7 @@ class LibraryTrack {
     sidModel: SidModel.auto,
     isNtsc: false,
     lengthMs: lengthMs > 0 ? lengthMs : null,
+    system: system,
   );
 
   List<Object> toJson() => [
@@ -90,6 +101,7 @@ class LibraryTrack {
     size,
     mtime,
     sidChips,
+    system.index,
   ];
 
   static LibraryTrack fromJson(List<dynamic> j) => LibraryTrack(
@@ -103,6 +115,10 @@ class LibraryTrack {
     size: j[7] as int,
     mtime: j[8] as int,
     sidChips: j.length > 9 ? j[9] as int : 1,
+    // Indexes from before 0.6.0 have no system: sidChips 0 meant Atari.
+    system: j.length > 10
+        ? TuneSystem.fromIndex(j[10] as int)
+        : (j.length > 9 && j[9] == 0 ? TuneSystem.atariSt : TuneSystem.c64),
   );
 }
 
@@ -117,7 +133,7 @@ class LibraryFolder {
   String get name => p.basename(path);
 }
 
-enum FormatFilter { all, sid, atari }
+enum FormatFilter { all, sid, atari, modules }
 
 class ScanProgress {
   const ScanProgress(this.done, this.total, this.phase);
@@ -333,8 +349,11 @@ class LibraryController extends ChangeNotifier {
         .toList();
     final out = <LibraryTrack>[];
     for (final t in tracks) {
-      if (filter == FormatFilter.sid && t.sidChips == 0) continue;
-      if (filter == FormatFilter.atari && t.sidChips != 0) continue;
+      if (filter == FormatFilter.sid && t.system != TuneSystem.c64) continue;
+      if (filter == FormatFilter.atari && t.system != TuneSystem.atariSt) {
+        continue;
+      }
+      if (filter == FormatFilter.modules && !t.isModule) continue;
       if (tokens.isNotEmpty && !t.matches(tokens)) continue;
       out.add(t);
       if (out.length >= limit) break;
@@ -370,8 +389,7 @@ void _scanWorker(_ScanArgs a) {
       for (final e in Directory(
         r,
       ).listSync(recursive: true, followLinks: false)) {
-        if (e is File &&
-            supportedExtensions.contains(p.extension(e.path).toLowerCase())) {
+        if (e is File && isSupportedFile(e.path)) {
           files.add(e);
         }
       }
@@ -410,6 +428,7 @@ void _scanWorker(_ScanArgs a) {
               size: size,
               mtime: mtime,
               sidChips: info.sidChips,
+              system: info.system,
             ).toJson(),
           );
           changed++;

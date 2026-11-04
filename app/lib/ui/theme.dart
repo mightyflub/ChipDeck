@@ -1,6 +1,8 @@
 // Visual theme: dark, retro-tinted, readable.
 import 'package:flutter/material.dart';
 
+import '../native/chipdeck_ffi.dart' show TuneSystem;
+
 class Palette {
   static const background = Color(0xFF0E0F1A);
   static const panel = Color(0xFF161829);
@@ -8,7 +10,8 @@ class Palette {
   static const border = Color(0xFF2A2E4D);
   static const accent = Color(0xFF8E7CFF); // C64-ish light blue/violet
   static const scope = Color(0xFF5CE1E6); // phosphor cyan
-  static const warm = Color(0xFFFFB86B);
+  static const warm = Color(0xFFFFB86B); // Atari ST
+  static const amiga = Color(0xFF7CE38B); // Amiga / tracker modules
   static const textMuted = Color(0xFF9AA0C3);
   static const voice = [
     Color(0xFF8E7CFF),
@@ -16,6 +19,13 @@ class Palette {
     Color(0xFFFF7AB6),
   ];
 }
+
+/// Badge colour for a tune's machine.
+Color systemColor(TuneSystem s) => switch (s) {
+  TuneSystem.c64 => Palette.scope,
+  TuneSystem.atariSt => Palette.warm,
+  TuneSystem.amiga || TuneSystem.pc => Palette.amiga,
+};
 
 ThemeData buildTheme() {
   final scheme =

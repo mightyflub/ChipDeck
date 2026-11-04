@@ -31,10 +31,26 @@ final class CdInfoStruct extends Struct {
   external int isNtsc;
   @Int32()
   external int lengthMs;
+  @Int32()
+  external int system;
 }
 
 /// SID model values (cd_sid_model).
 enum SidModel { auto, mos6581, mos8580 }
+
+/// The machine a tune was written for (cd_system).
+enum TuneSystem {
+  c64('C64'),
+  atariSt('Atari ST'),
+  amiga('Amiga'),
+  pc('PC');
+
+  const TuneSystem(this.label);
+  final String label;
+
+  static TuneSystem fromIndex(int i) =>
+      i >= 0 && i < values.length ? values[i] : c64;
+}
 
 /// Plain Dart copy of a tune's metadata.
 class TuneInfo {
@@ -49,6 +65,9 @@ class TuneInfo {
   final SidModel sidModel;
   final bool isNtsc;
   final int? lengthMs;
+  final TuneSystem system;
+
+  bool get isSid => system == TuneSystem.c64;
 
   const TuneInfo({
     required this.title,
@@ -62,6 +81,7 @@ class TuneInfo {
     required this.sidModel,
     required this.isNtsc,
     required this.lengthMs,
+    required this.system,
   });
 
   static String _str(Array<Uint8> a) {
@@ -91,6 +111,7 @@ class TuneInfo {
     sidModel: SidModel.values[s.sidModel.clamp(0, 2)],
     isNtsc: s.isNtsc != 0,
     lengthMs: s.lengthMs > 0 ? s.lengthMs : null,
+    system: TuneSystem.fromIndex(s.system),
   );
 }
 
@@ -259,8 +280,8 @@ class ChipDeckEngine {
   final Pointer<Utf8> _nameBuf = calloc<Uint8>(32).cast();
   List<String> _channelNames = const [];
 
-  /// Most channels a tune can have (3 SIDs x 4); CD_MAX_CHANNELS in C.
-  static const maxChannels = 12;
+  /// Most channels a tune can have (a 32-channel module); CD_MAX_CHANNELS in C.
+  static const maxChannels = 32;
 
   /// Returns null if no audio device could be opened.
   static ChipDeckEngine? create() {
@@ -304,7 +325,8 @@ class ChipDeckEngine {
   }
 
   /// Names of the tune's channels ("V1".."V3", "Digi", "2:V1"... for SID;
-  /// "A", "B", "C", "DAC" for Atari), empty if nothing is loaded.
+  /// "A", "B", "C", "DAC" for Atari; "1".."4" for an Amiga MOD), empty if
+  /// nothing is loaded.
   List<String> get channelNames {
     final n = _n._channelCount(_player).clamp(0, maxChannels);
     if (n != _channelNames.length) {

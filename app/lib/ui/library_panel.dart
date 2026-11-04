@@ -225,6 +225,11 @@ class _LibraryPanelState extends State<LibraryPanel> {
     (FormatFilter.all, 'All', 'All formats'),
     (FormatFilter.sid, 'C64', 'C64 SID'),
     (FormatFilter.atari, 'ST', 'Atari ST'),
+    (
+      FormatFilter.modules,
+      'MOD',
+      'Tracker modules (Amiga MOD, Fasttracker XM)',
+    ),
   ];
 
   /// Everything on one row: search, format filter, match count and actions.
@@ -755,7 +760,7 @@ class _TrackRow extends StatelessWidget {
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
-                    color: t.sidChips == 0 ? Palette.warm : Palette.scope,
+                    color: systemColor(t.system),
                   ),
                 ),
               ),
@@ -859,7 +864,7 @@ extension on _TrackRow {
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
-                    color: t.sidChips == 0 ? Palette.warm : Palette.scope,
+                    color: systemColor(t.system),
                   ),
                 ),
               ),

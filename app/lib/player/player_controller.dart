@@ -15,7 +15,17 @@ import '../native/chipdeck_ffi.dart';
 const supportedExtensions = {
   '.sid', '.psid', '.rsid', '.mus', '.prg', // C64
   '.sndh', '.snd', '.ym', // Atari ST
+  '.mod', // Amiga Protracker / Soundtracker modules
+  '.xm', // Fasttracker 2 modules
 };
+
+/// Whether ChipDeck can play [path], judged by its name: a supported
+/// extension, or the Amiga habit of a "mod." prefix ("mod.axelf").
+bool isSupportedFile(String path) {
+  final name = p.basename(path).toLowerCase();
+  if (name.startsWith('mod.') && name.length > 4) return true;
+  return supportedExtensions.contains(p.extension(name));
+}
 
 class PlaylistEntry {
   PlaylistEntry(this.path);
@@ -37,8 +47,7 @@ List<String> _scanFolder(String dir) {
     for (final f in Directory(
       dir,
     ).listSync(recursive: true, followLinks: false)) {
-      if (f is File &&
-          supportedExtensions.contains(p.extension(f.path).toLowerCase())) {
+      if (f is File && isSupportedFile(f.path)) {
         out.add(f.path);
       }
     }
@@ -208,7 +217,7 @@ class PlayerController extends ChangeNotifier {
     final added = <PlaylistEntry>[];
     for (final f in paths) {
       if (existing.contains(f)) continue;
-      if (!supportedExtensions.contains(p.extension(f).toLowerCase())) continue;
+      if (!isSupportedFile(f)) continue;
       final e = PlaylistEntry(f);
       playlist.add(e);
       added.add(e);

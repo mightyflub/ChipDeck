@@ -5,9 +5,9 @@ Detailed history and research live in [NOTES.md](NOTES.md).
 
 ## Goal
 
-ChipDeck is a retro chiptune player for **Windows and Android**. First
-target: play C64 **.sid** files on Windows. Also Atari ST **.sndh** and
-**.ym** (done in the core and CLI). Later: Android, possibly more chip formats.
+ChipDeck is a retro chiptune player for **Windows and Android**. It plays
+C64 **.sid**, Atari ST **.sndh** and **.ym**, Amiga **.mod** and
+Fasttracker 2 **.xm** (since 0.6.0). Possibly more formats later.
 
 ## Keeping Windows and Android in sync
 
@@ -49,6 +49,16 @@ and the version is given whenever a build is shared.
   "windows" ticked. Pushes to other branches without a PR build nothing.
 
 ## Current state (2026-11-04)
+
+- **Amiga MOD + Fasttracker 2 XM (0.6.0, branch claude/project-thread-cs3epz):**
+  played by vendored libxmp 4.6.3 (MIT) in the core (`core/src/mod_backend.cpp`),
+  same C API, so Windows and Android both get it. Paula (A500) mixer for
+  Amiga modules, subtunes = libxmp sequences, lengths for the library,
+  one scope per tracker channel (patch in libxmp's mixer, see
+  third_party/README.md). New `cd_info.system` (C64/Atari ST/Amiga/PC).
+  App: .mod/.xm (and "mod.*" names) in pickers and library, MOD filter,
+  badges. Details: NOTES.md (2026-11-04, Amiga MOD and Fasttracker 2 XM).
+  Waiting for Stephen to try real modules on the Ayn Thor.
 
 - **Per-channel visualiser (0.5.0, branch claude/project-thread-cc200r):**
   Now playing shows one oscilloscope per channel: SID V1-V3 + Digi (the
@@ -100,13 +110,16 @@ app/                      Flutter GUI (lib/native FFI, lib/player state, lib/ui 
                           lib/platform pickers + Android media bridge)
 app/android/              Android project: Gradle builds libchipdeck.so from the root
                           CMakeLists; MainActivity.kt (storage, pickers), PlaybackService.kt
+core/src/mod_backend.*    .mod/.xm via libxmp (chipdeck::ModTune)
 cli/main.cpp              chipdeck-cli (miniaudio output, WAV export, keys)
 tests/core_test.cpp       SID core tests, run with ctest
 tests/atari_test.cpp      SNDH/YM core tests
-tests/data/               chipdeck-test.sid/.sndh/.ym (our own public-domain tunes)
+tests/mod_test.cpp        MOD/XM core tests
+tests/data/               chipdeck-test.sid/.sndh/.ym/.mod/.xm (our own public-domain tunes)
 tools/make_test_sid.py    regenerates the SID test tune
 tools/make_test_atari.py  regenerates the SNDH (hand-assembled 68000) and YM test tunes
-third_party/              vendored libsidplayfp, libresidfp, AtariAudio, miniaudio + CMake build
+tools/make_test_mod.py    regenerates the MOD test tune (make_test_xm.py: the XM)
+third_party/              vendored libsidplayfp, libresidfp, AtariAudio, libxmp, miniaudio + CMake build
 cmake/                    toolchain file for MinGW cross-compile
 .github/workflows/        CI: Windows (MSVC) + Linux
 docs/                     HANDOVER.md (this), NOTES.md (log)
@@ -135,7 +148,11 @@ docs/                     HANDOVER.md (this), NOTES.md (log)
   Atari data from AtariAudio's `AudioRenderWithVisualInfos`.
 - Format choice: `cd_load_file/memory` and `cd_probe_file` check magic
   bytes (`chipdeck::isAtariTune`); Atari tunes go to `chipdeck::AtariTune`
-  (`core/src/atari_backend.cpp`), everything else to libsidplayfp. For
+  (`core/src/atari_backend.cpp`). Then files that are not PSID/RSID and
+  have no magic-less C64 extension are offered to libxmp
+  (`chipdeck::ModTune`, `core/src/mod_backend.cpp`); everything else goes
+  to libsidplayfp. `cd_info.system` says which (0 C64, 1 Atari ST,
+  2 Amiga, 3 PC/XM); modules have `sid_chips` 0 like Atari tunes. For
   Atari tunes `cd_info.sid_chips` is 0 (use it to tell the kinds apart),
   `format` is "SNDH", "YM 5", "YM 6" etc., `released` is the year, and
   `cd_get_sid_registers` returns 1. AtariAudio output is mono; the core
@@ -157,6 +174,8 @@ docs/                     HANDOVER.md (this), NOTES.md (log)
 | App <-> core | dart:ffi to a C API, metadata probing in a background isolate | Simple, no platform channels |
 | App look | Dark theme, violet accent (#8E7CFF), cyan phosphor scope | Retro feel, readable |
 | SNDH + YM emulation | AtariAudio 1.27 (vendored, MIT) | One small dependency-free library for both formats; see SNDH_YM_PLAN.md |
+| MOD + XM playback | libxmp 4.6.3 (vendored, MIT) | Plain C, small, Amiga Paula mixer, subsong scan with durations; libopenmpt is bigger C++ (NOTES.md 2026-11-04) |
+| Telling formats apart | Magic bytes, then libxmp, then libsidplayfp; `cd_info.system` | MODs have no reliable magic; C64 extensions without magic skip libxmp |
 | Sampling | 48 kHz, RESAMPLE_INTERPOLATE | Best quality; ~8x real time on one core, fine for playback |
 | Android file access | "All files access" + SAF pickers mapped to paths | Library/index code identical to Windows; fast on HVSC. Not Play Store friendly (see NOTES.md) |
 | Android background audio | Foreground service + MediaSessionCompat (androidx.media) | Survives screen off; lock screen and headset controls |
@@ -303,6 +322,8 @@ chipdeck-cli -i tune.sid              show info only
 chipdeck-cli tune.sndh                Atari ST SNDH (same options; -m is SID only)
 chipdeck-cli -s 2 tune.sndh           SNDH subtune 2
 chipdeck-cli tune.ym                  Atari ST YM (packed or not)
+chipdeck-cli tune.mod                 Amiga module (-s picks a hidden subsong)
+chipdeck-cli tune.xm                  Fasttracker 2 module
 keys: n/p next/prev subtune, space pause, q quit
 ```
 
@@ -312,6 +333,13 @@ built-in timedb, YM frame count); a few SNDH files have none and play forever.
 Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Known limitations
+
+- MOD/XM: no seeking yet (libxmp has `xmp_seek_time`, so it is easy).
+  Only .mod and .xm (and "mod.*" names) are offered by the app; libxmp
+  also plays .s3m, .it, .med, .okt and ~90 more, a one-line change in
+  `supportedExtensions` (plus pickers) once wanted. Big IT files can use
+  more than 32 channels; scopes then show the first 32. Modules have no
+  composer field, so Author stays empty.
 
 - Android: no audio focus handling yet (ChipDeck keeps playing over other
   apps and calls; headphone unplug does pause). Back button does not go up
@@ -336,6 +364,10 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
   the CLI unless `-t` is given.
 
 ## Next steps
+
+0. MOD/XM (0.6.0): Stephen tries real modules on the Ayn Thor (classic
+   4-channel Protracker MOD, 8-channel MOD, big XM, a PowerPacked mod).
+   Then: maybe .s3m/.it/.med, seeking, showing instrument names per channel.
 
 1. Stephen confirmed the Windows app and the library/search work (2026-11-04:
    "works well enough for now. I like it"). Next: merge PR #2, then Android.

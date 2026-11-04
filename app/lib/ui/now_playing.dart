@@ -229,7 +229,7 @@ class _Header extends StatelessWidget {
       _ => null,
     };
     final forced = controller.sidModel != SidModel.auto;
-    final isSid = (i?.sidChips ?? 1) > 0;
+    final isSid = i?.isSid ?? true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -238,7 +238,9 @@ class _Header extends StatelessWidget {
           runSpacing: 6,
           children: [
             if (i != null) _Chip(_shortFormat(i.format)),
-            if (i != null && !isSid) const _Chip('Atari ST', highlight: true),
+            if (i != null && !isSid) _Chip(i.system.label, highlight: true),
+            if (i != null && !isSid && i.system != TuneSystem.atariSt)
+              _Chip('${controller.channelNames.length} ch'),
             if (isSid && model != null)
               _Chip(forced ? '$model (forced)' : model, highlight: true),
             if (i != null && isSid) _Chip(i.isNtsc ? 'NTSC' : 'PAL'),

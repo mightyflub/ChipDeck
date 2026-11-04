@@ -3,6 +3,7 @@
 // where the controls run in their own Flutter engine and only see this
 // state, sent over a method channel.
 // Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
+import '../native/chipdeck_ffi.dart' show TuneSystem;
 import '../player/player_controller.dart';
 
 class RemoteState {
@@ -12,7 +13,7 @@ class RemoteState {
     this.author = '',
     this.released = '',
     this.format = '',
-    this.isAtari = false,
+    this.system = TuneSystem.c64,
     this.playing = false,
     this.positionMs = 0,
     this.lengthMs,
@@ -31,7 +32,7 @@ class RemoteState {
   final String author;
   final String released;
   final String format;
-  final bool isAtari;
+  final TuneSystem system;
   final bool playing;
   final int positionMs;
   final int? lengthMs;
@@ -53,7 +54,7 @@ class RemoteState {
       author: i?.author ?? e?.author ?? '',
       released: i?.released ?? '',
       format: i?.format ?? '',
-      isAtari: i != null && i.sidChips == 0,
+      system: i?.system ?? TuneSystem.c64,
       playing: c.playing,
       positionMs: c.positionMs,
       lengthMs: c.effectiveLengthMs,
@@ -74,7 +75,7 @@ class RemoteState {
     'author': author,
     'released': released,
     'format': format,
-    'isAtari': isAtari,
+    'system': system.index,
     'playing': playing,
     'positionMs': positionMs,
     'lengthMs': lengthMs,
@@ -94,7 +95,7 @@ class RemoteState {
     author: m['author'] as String? ?? '',
     released: m['released'] as String? ?? '',
     format: m['format'] as String? ?? '',
-    isAtari: m['isAtari'] as bool? ?? false,
+    system: TuneSystem.fromIndex((m['system'] as num?)?.toInt() ?? 0),
     playing: m['playing'] as bool? ?? false,
     positionMs: (m['positionMs'] as num?)?.toInt() ?? 0,
     lengthMs: (m['lengthMs'] as num?)?.toInt(),

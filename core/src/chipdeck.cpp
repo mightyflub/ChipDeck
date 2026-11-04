@@ -1,14 +1,17 @@
 /*
  * ChipDeck core implementation.
  * SID via libsidplayfp + reSIDfp; Atari ST .sndh/.ym via AtariAudio
- * (see atari_backend.cpp). A cd_player holds one tune of either kind.
+ * (see atari_backend.cpp); Amiga .mod and other tracker modules via libxmp
+ * (see mod_backend.cpp). A cd_player holds one tune of any kind.
  * Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
  */
 #define CHIPDECK_BUILDING
 #include "chipdeck/chipdeck.h"
 #include "atari_backend.h"
+#include "mod_backend.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -40,18 +43,24 @@ const unsigned int kCyclesPerChunk = 5000;
 // Per-channel history kept for cd_channel_scope().
 const size_t kChanRing = 4096;
 
-// Read a whole file, accepting UTF-8 paths on every platform.
-bool readFile(const char* path, std::vector<uint8_t>& out)
+// Open a file for reading, accepting UTF-8 paths on every platform.
+FILE* openFile(const char* path)
 {
 #ifdef _WIN32
     int n = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
-    if (n <= 0) return false;
+    if (n <= 0) return nullptr;
     std::wstring w(static_cast<size_t>(n), L'\0');
     MultiByteToWideChar(CP_UTF8, 0, path, -1, &w[0], n);
-    FILE* f = _wfopen(w.c_str(), L"rb");
+    return _wfopen(w.c_str(), L"rb");
 #else
-    FILE* f = std::fopen(path, "rb");
+    return std::fopen(path, "rb");
 #endif
+}
+
+// Read a whole file, accepting UTF-8 paths on every platform.
+bool readFile(const char* path, std::vector<uint8_t>& out)
+{
+    FILE* f = openFile(path);
     if (!f) return false;
     out.clear();
     uint8_t buf[65536];
@@ -94,6 +103,42 @@ void copyStr(char* dst, size_t cap, const char* src)
     std::snprintf(dst, cap, "%s", src);
 }
 
+// PSID/RSID files are recognised by their magic bytes.
+bool isSidFile(const std::vector<uint8_t>& b)
+{
+    return b.size() >= 4 && (std::memcmp(b.data(), "PSID", 4) == 0 ||
+                             std::memcmp(b.data(), "RSID", 4) == 0);
+}
+
+// C64 formats without magic bytes that libsidplayfp loads by extension.
+// They are never handed to libxmp, whose old Soundtracker loader guesses
+// from the data and could claim one.
+bool isC64Extension(const char* path)
+{
+    std::string s(path ? path : "");
+    const size_t slash = s.find_last_of("/\\");
+    if (slash != std::string::npos) s = s.substr(slash + 1);
+    const size_t dot = s.find_last_of('.');
+    if (dot == std::string::npos) return false;
+    std::string ext = s.substr(dot + 1);
+    for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (ext.size() == 3 && ext[0] == 'p' && std::isdigit(static_cast<unsigned char>(ext[1])) &&
+        std::isdigit(static_cast<unsigned char>(ext[2])))
+        return true;  // .p00 .. .p99
+    return ext == "prg" || ext == "c64" || ext == "mus" || ext == "str";
+}
+
+// Open `path` and let libxmp try it (it also unpacks packed modules).
+std::unique_ptr<chipdeck::ModTune> tryModFile(const char* path, size_t size, uint32_t rate,
+                                              int subtune, std::string& err)
+{
+    FILE* f = openFile(path);
+    if (!f) { err = "cannot open file"; return nullptr; }
+    auto t = chipdeck::ModTune::loadFile(f, static_cast<long>(size), rate, subtune, err);
+    std::fclose(f);
+    return t;
+}
+
 } // namespace
 
 struct cd_player
@@ -114,6 +159,8 @@ struct cd_player
     // Set when the loaded tune is an Atari ST tune; then the SID members
     // above are unused (tune is null, ready is false).
     std::unique_ptr<chipdeck::AtariTune> atari;
+    // Set when the loaded tune is a tracker module (Amiga .mod etc.).
+    std::unique_ptr<chipdeck::ModTune> mod;
 
     std::vector<short> chunk;  // engine output, interleaved stereo
     size_t chunkPos = 0;       // next unread int16 in chunk
@@ -123,7 +170,7 @@ struct cd_player
     int channels = 0;
     std::vector<std::string> channelNames;
     std::vector<int16_t> chanChunk;  // SID: `channels` values per chunk frame
-    std::vector<int16_t> chanTmp;    // Atari: `channels` values per frame
+    std::vector<int16_t> chanTmp;    // Atari/MOD: `channels` values per frame
     std::vector<int16_t> chanRing;   // kChanRing values per channel
     size_t chanPos = 0;              // next write index in each ring
     std::vector<float> dcIn, dcOut;  // DC blocker state per channel
@@ -230,16 +277,36 @@ struct cd_player
         return 0;
     }
 
-    int loadAtari(const uint8_t* data, size_t size, int subtune)
+    // Clear whatever was loaded before (SID, Atari or module).
+    void unload()
     {
         tune.reset();
+        atari.reset();
+        mod.reset();
         ready = false;
+    }
+
+    int loadAtari(const uint8_t* data, size_t size, int subtune)
+    {
+        unload();
         std::string err;
         atari = chipdeck::AtariTune::load(data, size, sampleRate, subtune, err);
         if (!atari) { setChannels({}); return fail(err); }
         std::vector<std::string> names;
         for (int c = 0; c < atari->channelCount(); ++c)
             names.push_back(atari->channelName(c));
+        setChannels(std::move(names));
+        error.clear();
+        return 0;
+    }
+
+    int useMod(std::unique_ptr<chipdeck::ModTune> t, const std::string& err)
+    {
+        if (!t) { setChannels({}); return fail(err); }
+        mod = std::move(t);
+        std::vector<std::string> names;
+        for (int c = 0; c < mod->channelCount(); ++c)
+            names.push_back(mod->channelName(c));
         setChannels(std::move(names));
         error.clear();
         return 0;
@@ -261,7 +328,7 @@ extern "C" {
 
 const char* cd_version(void)
 {
-    return CHIPDECK_VERSION " (libsidplayfp 3.1.2, libresidfp 1.2.3, AtariAudio 1.27)";
+    return CHIPDECK_VERSION " (libsidplayfp 3.1.2, libresidfp 1.2.3, AtariAudio 1.27, libxmp 4.6.3)";
 }
 
 cd_player* cd_create(uint32_t sample_rate)
@@ -340,9 +407,16 @@ int cd_load_file(cd_player* p, const char* path, int subtune)
     try
     {
         std::vector<uint8_t> bytes;
-        if (readFile(path, bytes) && chipdeck::isAtariTune(bytes.data(), bytes.size()))
+        const bool read = readFile(path, bytes);
+        if (read && chipdeck::isAtariTune(bytes.data(), bytes.size()))
             return p->loadAtari(bytes.data(), bytes.size(), subtune);
-        p->atari.reset();
+        p->unload();
+        if (read && !isSidFile(bytes) && !isC64Extension(path))
+        {
+            std::string err;
+            auto m = tryModFile(path, bytes.size(), p->sampleRate, subtune, err);
+            if (m) return p->useMod(std::move(m), err);
+        }
         p->tune.reset(new SidTune(tuneLoader, path, nullptr, true));
         return p->finishLoad(subtune);
     }
@@ -358,7 +432,13 @@ int cd_load_memory(cd_player* p, const void* data, size_t size, int subtune)
         const uint8_t* bytes = static_cast<const uint8_t*>(data);
         if (chipdeck::isAtariTune(bytes, size))
             return p->loadAtari(bytes, size, subtune);
-        p->atari.reset();
+        p->unload();
+        if (!(size >= 4 && (std::memcmp(bytes, "PSID", 4) == 0 || std::memcmp(bytes, "RSID", 4) == 0)))
+        {
+            std::string err;
+            auto m = chipdeck::ModTune::loadMemory(bytes, size, p->sampleRate, subtune, err);
+            if (m) return p->useMod(std::move(m), err);
+        }
         p->tune.reset(new SidTune(static_cast<const uint_least8_t*>(data),
                                   static_cast<uint_least32_t>(size)));
         return p->finishLoad(subtune);
@@ -373,6 +453,12 @@ int cd_select_subtune(cd_player* p, int subtune)
     if (p->atari)
     {
         if (p->atari->select(subtune)) { p->setChannels(p->channelNames); return 0; }
+        p->error = "subtune out of range";
+        return 1;
+    }
+    if (p->mod)
+    {
+        if (p->mod->select(subtune)) { p->setChannels(p->channelNames); return 0; }
         p->error = "subtune out of range";
         return 1;
     }
@@ -393,6 +479,7 @@ int cd_get_info(cd_player* p, cd_info* out)
     std::memset(out, 0, sizeof *out);
     out->length_ms = -1;
     if (p->atari) { p->atari->fillInfo(out); return 0; }
+    if (p->mod) { p->mod->fillInfo(out); return 0; }
     if (!p->tune) return 1;
     const SidTuneInfo* ti = p->tune->getInfo();
     const unsigned nInfo = ti->numberOfInfoStrings();
@@ -424,6 +511,13 @@ size_t cd_render(cd_player* p, int16_t* out, size_t frames)
     {
         p->chanTmp.resize(frames * static_cast<size_t>(p->channels));
         size_t n = p->atari->render(out, frames, p->channels ? p->chanTmp.data() : nullptr);
+        p->pushChannels(p->chanTmp.data(), n);
+        return n;
+    }
+    if (p->mod)
+    {
+        p->chanTmp.resize(frames * static_cast<size_t>(p->channels));
+        size_t n = p->mod->render(out, frames, p->channels ? p->chanTmp.data() : nullptr);
         p->pushChannels(p->chanTmp.data(), n);
         return n;
     }
@@ -478,6 +572,7 @@ uint32_t cd_position_ms(cd_player* p)
     if (!p) return 0;
     std::lock_guard<std::mutex> g(p->lock);
     if (p->atari) return p->atari->positionMs();
+    if (p->mod) return p->mod->positionMs();
     return p->ready ? p->engine.timeMs() : 0;
 }
 
@@ -493,7 +588,7 @@ int cd_channel_count(cd_player* p)
 {
     if (!p) return 0;
     std::lock_guard<std::mutex> g(p->lock);
-    return (p->atari || p->ready) ? p->channels : 0;
+    return (p->atari || p->mod || p->ready) ? p->channels : 0;
 }
 
 int cd_channel_name(cd_player* p, int ch, char* out, size_t cap)
@@ -529,8 +624,21 @@ int cd_probe_file(const char* path, const char* songlengths_path, cd_info* out)
     try
     {
         std::vector<uint8_t> bytes;
-        if (readFile(path, bytes) && chipdeck::isAtariTune(bytes.data(), bytes.size()))
+        const bool read = readFile(path, bytes);
+        if (read && chipdeck::isAtariTune(bytes.data(), bytes.size()))
             return chipdeck::AtariTune::probe(bytes.data(), bytes.size(), out) ? 0 : 1;
+        if (read && !isSidFile(bytes) && !isC64Extension(path))
+        {
+            FILE* f = openFile(path);
+            if (f)
+            {
+                const bool ok = chipdeck::ModTune::probeFile(f, static_cast<long>(bytes.size()), out);
+                std::fclose(f);
+                if (ok) return 0;
+                std::memset(out, 0, sizeof *out);
+                out->length_ms = -1;
+            }
+        }
         SidTune tune(tuneLoader, path, nullptr, true);
         if (!tune.getStatus()) return 1;
         tune.selectSong(0);

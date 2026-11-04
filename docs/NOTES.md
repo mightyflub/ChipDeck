@@ -357,3 +357,64 @@ Not tested on real digi tunes in the cloud (HVSC is blocked here); worth
 checking with e.g. a Mahoney or Galway digi tune on Stephen's devices.
 
 Stephen tried 0.5.0-test.61 on the Ayn Thor: "that works."
+
+## 2026-11-04: Amiga MOD and Fasttracker 2 XM (0.6.0)
+
+Stephen asked for the Amiga .mod format, then also Fasttracker 2 .xm.
+
+Engine choice: **libxmp 4.6.3** (MIT, plain C, vendored in
+third_party/libxmp from the libxmp-4.6.3 git tag). Compared with libopenmpt
+(BSD, C++17, larger, more accurate on IT/MPTM): libxmp is smaller, builds
+everywhere with no dependencies, has an Amiga 500 "Paula" mixer
+(XMP_FLAGS_A500: BLEP output plus the LED filter, as on the real machine)
+and reports hidden subsongs ("sequences") with durations at load time, so
+the library gets lengths and subtune counts without rendering. It also
+loads PowerPacker/zip/gz/lha-packed modules and ProWizard-packed Amiga
+formats when given a file. Both formats are covered by the same engine.
+
+How it plugs in (core/src/mod_backend.cpp, `chipdeck::ModTune`):
+- Detection order in `cd_load_file`/`cd_probe_file`: Atari magic, then
+  PSID/RSID magic, then (unless the extension is a C64 one without magic:
+  .prg .p00 .mus .str .c64) libxmp, then libsidplayfp as before. The C64
+  extension check stops libxmp's guessing Soundtracker loader from claiming
+  a .prg.
+- Files are opened by ChipDeck (UTF-8 paths on Windows) and handed to
+  `xmp_load_module_from_file`, which unpacks in memory and never runs
+  external tools (the unrar/unmo3 helpers need a file name, which we never
+  pass). `cd_load_memory` uses `xmp_load_module_from_memory` (no unpacking).
+- Subtunes are libxmp sequences; length_ms is the sequence duration.
+  Playback loops forever like SID/Atari; the app advances by length.
+- New `cd_info.system` (appended at the end of the struct; Dart maps it):
+  C64 0, Atari ST 1, Amiga 2, PC 3. XM files are "PC" (libxmp names their
+  type "<tracker> XM <version>"), all other modules "Amiga".
+- Per-channel scopes: a "ChipDeck patch" in libxmp's mixer.c records how
+  much each voice adds to the mix buffer in every tick (buffer before and
+  after mixing that voice), summed per tracker channel (the voice's root
+  channel, so FT2 fade-out voices count for their channel). Read with
+  `xmp_chipdeck_read_tap` after each `xmp_play_frame`. Channels are named
+  "1".."N"; CD_MAX_CHANNELS went from 12 to 32 (XM allows 32).
+- Mixer: Paula for Amiga modules, cubic spline interpolation for the rest,
+  libxmp's default 70% stereo separation (Amiga hard-panning is tiring on
+  headphones).
+
+App: .mod and .xm in the pickers and library scan, plus the Amiga habit of
+a "mod." prefix ("mod.axelf") when scanning folders; library badge MOD/XM
+in green; a "MOD" filter (tracker modules) next to C64/ST; now playing
+shows "Amiga" or "PC" and the channel count; second-screen controls show
+the system. Visualiser: tracker channels cycle violet/cyan/pink/green, rows
+of 8 above 12 channels, and a narrow window drops to a column count that
+divides the channels evenly (6 -> 3 x 2). Library indexes from before
+0.6.0 load fine (sidChips 0 is read as Atari) and pick up modules on the
+next rescan.
+
+Tests: tests/mod_test.cpp with our own tunes from tools/make_test_mod.py
+(4-channel M.K. with a hidden second sequence) and tools/make_test_xm.py
+(6 channels, channel 6 starts late): metadata, subtunes, channel
+separation, memory loading, switching back to SID. Clean under
+AddressSanitizer. Linux app checked under Xvfb (6-channel XM and the
+731x411 landscape layout with a 4-channel MOD): docs/screenshots/
+channels-xm.png and landscape-channels-mod.png.
+
+Not tested in the cloud: real MOD/XM collections (Modland/AMP are not
+reachable here). Worth trying on Stephen's devices: a classic Protracker
+MOD, an 8-channel MOD, a big XM (20+ channels), and a PowerPacked mod.
