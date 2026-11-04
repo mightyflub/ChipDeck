@@ -91,3 +91,27 @@ What was done:
 ## 2026-11-04: Confirmed on Windows
 
 Stephen ran the MinGW-built chipdeck-cli.exe on his PC: "runs well".
+
+## 2026-11-04: Flutter app (milestone 2)
+
+Stephen asked to start the Flutter app: "attractive but functional".
+
+- Core grew a shared library (`chipdeck-shared` target, file chipdeck.dll /
+  libchipdeck.so) with `cd_audio_*` (miniaudio output, volume, scope ring
+  buffer), `cd_get_sid_registers` (for voice meters) and `cd_probe_file`
+  (metadata for lists; caches the Songlengths DB across calls).
+- Target had to be renamed from `chipdeck` because Flutter's runner
+  executable target is also called `chipdeck` (CMP0002 clash).
+- The app runner CMakeLists (`app/windows`, `app/linux`) add the repo root
+  as a subdirectory and bundle the library via PLUGIN_BUNDLED_LIBRARIES.
+- Linux loads `<exe dir>/lib/libchipdeck.so` explicitly; Windows loads
+  `chipdeck.dll` from the exe folder.
+- Probing and folder scans run in `Isolate.run` with top-level functions
+  (closures in instance methods can capture `this`, which cannot be sent).
+- Flutter cannot build Windows apps from Linux, so the Windows app build
+  is only checked in CI. Linux build tested in the container under Xvfb
+  (no sound card; miniaudio falls back to its null device, which still
+  drives the render callback, so the scope works).
+- SID voice meter: from register writes only (gate, sustain level,
+  waveform, frequency -> note name). Real envelope output is not exposed
+  by libsidplayfp's getSidStatus.

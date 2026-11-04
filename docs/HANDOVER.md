@@ -11,25 +11,32 @@ Atari ST **.sndh**, possibly more chip formats.
 
 ## Current state (2026-11-04)
 
-- **Milestone 1 done, confirmed working on Stephen's Windows PC (2026-11-04):** a
+- **Milestone 1 done, confirmed working on Stephen's Windows PC:** a
   command-line player `chipdeck-cli` that plays .sid files through the
   speakers or renders them to WAV.
-- `chipdeck-core` library with a plain C API (`core/include/chipdeck/chipdeck.h`)
-  wraps libsidplayfp 3.1.2 + reSIDfp 1.2.3. This is the piece the future
-  Flutter UI and Android app will call.
-- Unit tests pass on Linux (also under AddressSanitizer). Windows builds
-  with MinGW cross-compile; GitHub Actions builds with MSVC and uploads
-  `chipdeck-cli.exe` as an artifact.
-- Not yet verified with real HVSC tunes in the cloud (HVSC download hosts
-  are blocked from the dev container), only with our own test tune.
-- Stack approved by Stephen on 2026-11-04: CLI first, Flutter UI later.
+- **Milestone 2 in progress: Flutter GUI (`app/`).** Builds and runs on
+  Linux (screenshots in `docs/screenshots/`). Windows build runs in CI
+  (`app-windows` job, artifact `chipdeck-app-windows-x64`); waiting for
+  Stephen to try it. Stephen asked for an "attractive but functional"
+  interface.
+- `chipdeck-core` has a plain C API (`core/include/chipdeck/chipdeck.h`)
+  wrapping libsidplayfp 3.1.2 + reSIDfp 1.2.3. It is also built as a
+  shared library (`chipdeck.dll` / `libchipdeck.so`, CMake target
+  `chipdeck-shared`) that includes audio output (miniaudio) for the app.
+- A parallel thread is adding SNDH/YM playback to the core (branch
+  claude/project-thread-lu47hk). It owns `core/src/chipdeck.cpp` changes;
+  coordinate before editing that file.
+- Unit tests pass on Linux (also under AddressSanitizer). HVSC download
+  hosts are blocked from the cloud dev container, so real-tune testing
+  happens on Stephen's PC.
 
 ## Repository layout
 
 ```
 CMakeLists.txt            top-level build (core, cli, tests)
 core/include/chipdeck/    public C API (chipdeck.h)
-core/src/                 implementation (libsidplayfp wrapper)
+core/src/                 implementation (libsidplayfp wrapper, chipdeck_audio.cpp output)
+app/                      Flutter GUI (lib/native FFI, lib/player state, lib/ui widgets)
 cli/main.cpp              chipdeck-cli (miniaudio output, WAV export, keys)
 tests/core_test.cpp       core tests, run with ctest
 tests/data/               chipdeck-test.sid (our own public-domain tune)
@@ -69,7 +76,10 @@ docs/                     HANDOVER.md (this), NOTES.md (log)
 | Audio output | miniaudio 0.11.26 | One file, WASAPI on Windows, AAudio on Android |
 | Build system | CMake >= 3.16 | Works with Visual Studio and the Android NDK |
 | License | GPL-2.0-or-later (LICENSE) | Required by libsidplayfp |
-| UI | CLI now, Flutter later | Approved by Stephen 2026-11-04 |
+| UI | CLI for testing, Flutter app for users | Approved by Stephen 2026-11-04 |
+| App audio | Native: miniaudio inside chipdeck.dll | No Flutter audio plugin needed; same code on Android |
+| App <-> core | dart:ffi to a C API, metadata probing in a background isolate | Simple, no platform channels |
+| App look | Dark theme, violet accent (#8E7CFF), cyan phosphor scope | Retro feel, readable |
 | Sampling | 48 kHz, RESAMPLE_INTERPOLATE | Best quality; ~8x real time on one core, fine for playback |
 
 ## How to build and run
@@ -90,6 +100,30 @@ build\Release\chipdeck-cli.exe path\to\tune.sid
 ```
 
 Or download `chipdeck-cli-windows-x64` from the latest GitHub Actions run.
+
+### The Flutter app
+
+Needs Flutter (stable, 3.47 or newer). On Windows also Visual Studio with
+"Desktop development with C++".
+
+```
+cd app
+flutter pub get
+flutter run -d windows                 # development
+flutter build windows --release        # -> app\build\windows\x64\runner\Release\chipdeck.exe
+```
+
+On Linux: `sudo apt install ninja-build libgtk-3-dev clang`, then
+`flutter build linux --release`. The runner CMakeLists files include the
+repo root CMakeLists, so the native library is built automatically.
+
+App features: playlist (files or whole folders, searchable, remembered
+between runs), now playing (title, author, released, PSID/RSID, 6581/8580,
+PAL/NTSC, 2SID/3SID), oscilloscope, per-voice activity (waveform, note,
+level), progress with Songlengths support, transport, subtune picker,
+volume, auto-advance modes (all subtunes then next, next tune, repeat),
+shuffle, settings (SID model, Songlengths.md5, default length).
+Keys: Space play/pause, Left/Right subtune, N/P tune, +/- volume.
 
 ### Linux
 
@@ -131,13 +165,14 @@ Songlengths.md5 is in HVSC at `C64Music/DOCUMENTS/Songlengths.md5`.
 
 ## Next steps
 
-1. Done: Stephen ran chipdeck-cli.exe on Windows and it plays well. Still worth checking
-   (include an RSID digi tune and a 2SID tune). Fix whatever breaks.
-2. Optional: try a smaller CPU budget (INTERPOLATE sampling) for Android.
-3. Start the Flutter app (`app/`): Windows desktop first, calling
-   `chipdeck-core` as a DLL via dart:ffi (`CHIPDECK_SHARED`), with file
-   picker, subtune selector, play/pause, song length, playlist.
-4. Android: build `chipdeck-core` with the NDK (CMake already compatible),
-   load it from Flutter; audio via miniaudio (AAudio) in the core or a
-   Flutter audio plugin.
-5. SNDH: evaluate psgplay (GPL-2.0) and add it behind the same C API.
+1. Stephen tries the Windows app build and gives feedback on the UI.
+   Still worth testing real HVSC tunes: an RSID digi tune and a 2SID tune.
+2. Android: add `externalNativeBuild` to `app/android/app/build.gradle.kts`
+   pointing at the repo root CMakeLists (`CHIPDECK_BUILD_CLI=OFF`,
+   `CHIPDECK_BUILD_TESTS=OFF`), check miniaudio on AAudio, file access
+   via the Storage Access Framework, and maybe INTERPOLATE sampling to
+   save battery.
+3. Merge SNDH/YM support from the other thread; make sure the app's
+   file filters and probe handle .sndh/.ym.
+4. Nice to have: drag and drop files onto the window, STIL comments,
+   HVSC browser, app icon, installer (MSIX or Inno Setup).
