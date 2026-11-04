@@ -6,7 +6,7 @@ Retro chiptune player for Windows and Android. Plays C64 `.sid` files today
 Quick start on Windows (Visual Studio 2022):
 
 ```
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake -S . -B build -A x64
 cmake --build build --config Release
 build\Release\chipdeck-cli.exe tune.sid
 ```

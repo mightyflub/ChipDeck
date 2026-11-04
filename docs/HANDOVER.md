@@ -76,13 +76,14 @@ docs/                     HANDOVER.md (this), NOTES.md (log)
 
 ### Windows (Visual Studio 2022)
 
-Needs Visual Studio 2022 with "Desktop development with C++" (includes CMake).
+Needs Visual Studio 2022 or newer with "Desktop development with C++" (includes CMake).
+CMake picks the newest installed Visual Studio automatically.
 From a "Developer PowerShell for VS 2022":
 
 ```
 git clone https://github.com/mightyflub/ChipDeck
 cd ChipDeck
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake -S . -B build -A x64
 cmake --build build --config Release
 ctest --test-dir build -C Release
 build\Release\chipdeck-cli.exe path\to\tune.sid
