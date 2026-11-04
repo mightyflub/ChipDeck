@@ -1,0 +1,43 @@
+// ChipDeck: retro chiptune player.
+// Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
+import 'package:flutter/material.dart';
+
+import 'library/library.dart';
+import 'player/player_controller.dart';
+import 'ui/home_page.dart';
+import 'ui/theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final controller = await PlayerController.create();
+  final library = await LibraryController.create();
+  library.songlengthsPath = () => controller.songlengthsPath;
+  library.onSonglengthsFound = (path) => controller.setSonglengths(path);
+  // A new Songlengths file changes lengths for every tune: refresh the index.
+  controller.onSonglengthsChanged = () => library.rescan(full: true);
+  runApp(ChipDeckApp(controller: controller, library: library));
+  // Pick up tunes added to the archive since last time (only new or
+  // changed files are read, so this is quick).
+  library.rescan();
+}
+
+class ChipDeckApp extends StatelessWidget {
+  const ChipDeckApp({
+    super.key,
+    required this.controller,
+    required this.library,
+  });
+
+  final PlayerController controller;
+  final LibraryController library;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ChipDeck',
+      debugShowCheckedModeBanner: false,
+      theme: buildTheme(),
+      home: HomePage(controller: controller, library: library),
+    );
+  }
+}

@@ -1,0 +1,72 @@
+cmake_minimum_required(VERSION 3.16)
+project(ChipDeck VERSION 0.1.0 LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+endif()
+if(MSVC)
+  # Static CRT so chipdeck-cli.exe runs without the VC++ redistributable.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+  # Make MSVC report the real C++ standard in __cplusplus (reSIDfp checks it).
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
+endif()
+
+if(WIN32)
+  # windows.h must not define min/max macros (they break std::min).
+  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
+option(CHIPDECK_BUILD_CLI "Build the chipdeck-cli test player" ON)
+option(CHIPDECK_BUILD_TESTS "Build tests" ON)
+
+add_subdirectory(third_party)
+
+# ------------------------------------------------------------ chipdeck-core
+add_library(chipdeck-core STATIC core/src/chipdeck.cpp core/src/atari_backend.cpp)
+target_include_directories(chipdeck-core PUBLIC core/include)
+target_compile_definitions(chipdeck-core PRIVATE CHIPDECK_VERSION="${PROJECT_VERSION}")
+target_link_libraries(chipdeck-core PRIVATE sidplayfp atariaudio)
+
+# ---------------------------------------------------- chipdeck shared library
+# Core + audio output as one DLL/.so for the Flutter app (dart:ffi) and Android.
+option(CHIPDECK_BUILD_SHARED "Build the chipdeck shared library" ON)
+if(CHIPDECK_BUILD_SHARED)
+  set_target_properties(residfp sidplayfp miniaudio atariaudio PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  add_library(chipdeck-shared SHARED core/src/chipdeck.cpp core/src/atari_backend.cpp
+                                     core/src/chipdeck_audio.cpp)
+  target_include_directories(chipdeck-shared PUBLIC core/include)
+  target_compile_definitions(chipdeck-shared
+    PUBLIC CHIPDECK_SHARED
+    PRIVATE CHIPDECK_VERSION="${PROJECT_VERSION}")
+  # Target is chipdeck-shared (the Flutter app's executable is called chipdeck);
+  # the file is chipdeck.dll / libchipdeck.so.
+  set_target_properties(chipdeck-shared PROPERTIES OUTPUT_NAME chipdeck
+    CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+  target_link_libraries(chipdeck-shared PRIVATE sidplayfp atariaudio miniaudio)
+  if(MINGW)
+    target_link_options(chipdeck-shared PRIVATE -static -static-libgcc -static-libstdc++)
+  endif()
+endif()
+
+# -------------------------------------------------------------- chipdeck-cli
+if(CHIPDECK_BUILD_CLI)
+  add_executable(chipdeck-cli cli/main.cpp)
+  target_link_libraries(chipdeck-cli PRIVATE chipdeck-core miniaudio)
+endif()
+
+# --------------------------------------------------------------------- tests
+if(CHIPDECK_BUILD_TESTS)
+  enable_testing()
+  add_executable(chipdeck-tests tests/core_test.cpp)
+  target_link_libraries(chipdeck-tests PRIVATE chipdeck-core)
+  target_compile_definitions(chipdeck-tests PRIVATE
+    CHIPDECK_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+  add_test(NAME core COMMAND chipdeck-tests)
+  add_executable(chipdeck-atari-tests tests/atari_test.cpp)
+  target_link_libraries(chipdeck-atari-tests PRIVATE chipdeck-core)
+  target_compile_definitions(chipdeck-atari-tests PRIVATE
+    CHIPDECK_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+  add_test(NAME atari COMMAND chipdeck-atari-tests)
+endif()

@@ -1,0 +1,96 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure (MSVC, newest Visual Studio on the runner)
+        run: cmake -S . -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Render test tune to WAV
+        run: |
+          build\Release\chipdeck-cli.exe -t 5 -w test.wav tests\data\chipdeck-test.sid
+          build\Release\chipdeck-cli.exe -t 5 -w test-sndh.wav tests\data\chipdeck-test.sndh
+          build\Release\chipdeck-cli.exe -t 5 -w test-ym.wav tests\data\chipdeck-test.ym
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build\Release\chipdeck-cli.exe dist\
+          Copy-Item tests\data\chipdeck-test.sid dist\
+          Copy-Item tests\data\chipdeck-test.sndh dist\
+          Copy-Item tests\data\chipdeck-test.ym dist\
+          Copy-Item LICENSE dist\LICENSE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chipdeck-cli-windows-x64
+          path: dist/
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Render test tune to WAV
+        run: |
+          ./build/chipdeck-cli -t 5 -w test.wav tests/data/chipdeck-test.sid
+          ./build/chipdeck-cli -t 5 -w test-sndh.wav tests/data/chipdeck-test.sndh
+          ./build/chipdeck-cli -t 5 -w test-ym.wav tests/data/chipdeck-test.ym
+
+  app-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+      - name: Analyze
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+      - name: Build Windows app
+        working-directory: app
+        run: flutter build windows --release
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item -Recurse app\build\windows\x64\runner\Release dist\ChipDeck
+          Copy-Item LICENSE dist\ChipDeck\LICENSE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chipdeck-app-windows-x64
+          path: dist/
+
+  app-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libgtk-3-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+      - name: Analyze and build
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter build linux --release
