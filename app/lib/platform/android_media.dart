@@ -7,6 +7,8 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import '../player/player_controller.dart';
+import 'remote_controls.dart';
+import 'second_screen.dart';
 
 class AndroidMedia {
   AndroidMedia._(this._player);
@@ -22,9 +24,35 @@ class AndroidMedia {
     final m = AndroidMedia._(player);
     _channel.setMethodCallHandler(m._onCall);
     player.addListener(m._sync);
+    player.addListener(m._syncControls);
+    void sendEnabled() => _channel.invokeMethod(
+      'setSecondScreenEnabled',
+      secondScreenEnabled.value,
+    );
+    secondScreenEnabled.addListener(sendEnabled);
+    sendEnabled();
+  }
+
+  /// Sends the player state to the second-screen controls, if showing.
+  void _syncControls() {
+    if (!secondScreenActive.value) return;
+    _channel.invokeMethod('controlsState', remoteStateOf(_player));
   }
 
   Future<dynamic> _onCall(MethodCall call) async {
+    switch (call.method) {
+      case 'secondScreen':
+        secondScreenActive.value = call.arguments == true;
+        _syncControls();
+        return null;
+      case 'controlsReady':
+        _syncControls();
+        return null;
+      case 'controlsAction':
+        final m = call.arguments as Map;
+        applyRemoteAction(_player, m['action'] as String, m['value']);
+        return null;
+    }
     if (call.method != 'mediaAction') return null;
     switch (call.arguments as String?) {
       case 'toggle':

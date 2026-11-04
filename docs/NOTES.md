@@ -259,3 +259,21 @@ one-line rows with columns, and a two-column Now playing that fits without
 scrolling. Search shows 9 rows at 731x411 instead of ~1. Wide desktop and
 portrait layouts are unchanged (checked with screenshots under Xvfb using
 the new CHIPDECK_WINDOW size override in the Linux runner).
+
+## 2026-11-04: Second-screen controls
+
+Stephen asked for dual-screen support on the Ayn Thor: player controls on
+the bottom screen, everything else on top. Android exposes the second
+display through DisplayManager, so ChipDeck shows an Android Presentation
+there whenever a display other than its own is on. The controls are
+Flutter too, in a second engine from a FlutterEngineGroup (cheap: it
+shares the code and assets with the main engine) with its own entrypoint,
+`controlsMain`. The second engine has no player of its own: the main engine
+sends a small state map (title, position, subtunes, volume, advance mode,
+playlist position) on every player change, and the controls send actions
+back; Kotlin only relays. While the controls are showing, the main screen
+hides its transport and subtune buttons to give the library more room.
+Untested on hardware: the Thor may not report its bottom screen as a
+presentation display, which is why any non-own display is used as a
+fallback. A setting turns it off.
+

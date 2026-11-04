@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../native/chipdeck_ffi.dart';
+import '../platform/second_screen.dart';
 import '../player/player_controller.dart';
 import 'theme.dart';
 import 'visualizer.dart';
@@ -19,9 +20,11 @@ class NowPlaying extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: controller,
+      listenable: Listenable.merge([controller, secondScreenActive]),
       builder: (context, _) {
         final c = controller;
+        // Controls on a second screen: leave them out here.
+        final remote = secondScreenActive.value;
         final info = c.info;
         final pad = compact ? 16.0 : 32.0;
         return LayoutBuilder(
@@ -30,7 +33,7 @@ class NowPlaying extends StatelessWidget {
             // details and controls on the left, visualiser on the right,
             // all on one screen without scrolling.
             if (box.maxHeight < 560 && box.maxWidth >= 560) {
-              return _Landscape(controller: c, info: info);
+              return _Landscape(controller: c, info: info, remote: remote);
             }
             return SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(pad, pad, pad, pad),
@@ -47,9 +50,11 @@ class NowPlaying extends StatelessWidget {
                         Visualizer(controller: c, height: compact ? 140 : 190),
                         SizedBox(height: compact ? 16 : 24),
                         _Progress(controller: c),
-                        const SizedBox(height: 12),
-                        _Transport(controller: c),
-                        if (info != null && info.subtunes > 1) ...[
+                        if (!remote) ...[
+                          const SizedBox(height: 12),
+                          _Transport(controller: c),
+                        ],
+                        if (!remote && info != null && info.subtunes > 1) ...[
                           const SizedBox(height: 20),
                           _Subtunes(controller: c, info: info),
                         ],
@@ -67,9 +72,16 @@ class NowPlaying extends StatelessWidget {
 }
 
 class _Landscape extends StatelessWidget {
-  const _Landscape({required this.controller, required this.info});
+  const _Landscape({
+    required this.controller,
+    required this.info,
+    required this.remote,
+  });
   final PlayerController controller;
   final TuneInfo? info;
+
+  /// Controls are on a second screen.
+  final bool remote;
 
   @override
   Widget build(BuildContext context) {
@@ -90,13 +102,13 @@ class _Landscape extends StatelessWidget {
                     child: _Header(controller: c, info: i, compact: true),
                   ),
                 ),
-                if (i != null && i.subtunes > 1) ...[
+                if (!remote && i != null && i.subtunes > 1) ...[
                   const SizedBox(height: 6),
                   _SubtuneStrip(controller: c, info: i),
                 ],
                 const SizedBox(height: 8),
                 _Progress(controller: c),
-                _Transport(controller: c, dense: true),
+                if (!remote) _Transport(controller: c, dense: true),
               ],
             ),
           ),

@@ -24,6 +24,7 @@ class MainActivity : FlutterActivity() {
     private lateinit var channel: MethodChannel
     private var pending: MethodChannel.Result? = null
     private var askedNotifications = false
+    private var secondScreen: SecondScreen? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -48,6 +49,14 @@ class MainActivity : FlutterActivity() {
                     PlaybackService.stop(this)
                     result.success(null)
                 }
+                "controlsState" -> {
+                    secondScreen?.sendState(call.arguments)
+                    result.success(null)
+                }
+                "setSecondScreenEnabled" -> {
+                    secondScreen?.enabled = call.arguments as? Boolean ?: true
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -56,6 +65,14 @@ class MainActivity : FlutterActivity() {
         PlaybackService.onAction = { action ->
             runOnUiThread { channel.invokeMethod("mediaAction", action) }
         }
+        secondScreen = SecondScreen(this, channel)
+    }
+
+    // The controls stay on the second screen while ChipDeck is in the
+    // background (it is a music player); they go when the activity does.
+    override fun onStart() {
+        super.onStart()
+        secondScreen?.start()
     }
 
     // Back on the first screen: go to the background like other music
@@ -67,6 +84,8 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         PlaybackService.onAction = null
+        secondScreen?.stop()
+        secondScreen = null
         val finishing = isFinishing
         super.onDestroy()
         if (finishing) {

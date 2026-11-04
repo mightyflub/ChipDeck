@@ -23,6 +23,9 @@ only inside `lib/platform/`.
 - Android only: background playback notification, lock screen/headset
   controls, pause on headphone unplug (Windows has no equivalent need yet;
   SMTC media keys on Windows would be the counterpart).
+- Android only: player controls on a second screen (dual-screen devices
+  such as the Ayn Thor). Windows could do the same on a second monitor
+  with a second window; not planned unless asked.
 - Windows only: keyboard shortcuts (harmless on Android; work with a
   Bluetooth keyboard).
 
@@ -184,6 +187,17 @@ whenever a list is >= 560 dp wide, and a two-column Now playing (details
 and controls left, scope and voices right). To check a layout on Linux:
 `CHIPDECK_WINDOW=731x411 build/linux/x64/release/bundle/chipdeck`.
 Screenshots: docs/screenshots/landscape-*.png.
+
+Second screen (Android): when the device has another display (Ayn Thor's
+bottom screen, an external monitor), the player controls move there
+(`lib/ui/controls_screen.dart`, screenshot
+docs/screenshots/second-screen-controls.png) and the main screen drops its
+transport and subtune buttons. The controls are a second Flutter engine
+(`controlsMain()` in `lib/main.dart`) shown in an Android `Presentation`
+by `SecondScreen.kt`; state and actions go through MainActivity
+(`controlsState` / `controlsAction`, see `lib/platform/remote_controls.dart`
+and `android_media.dart`). Setting: "Controls on second screen" (on by
+default). Not yet tried on a real dual-screen device.
 
 App features: playlist (files or whole folders, searchable, remembered
 between runs), now playing (title, author, released, PSID/RSID, 6581/8580,

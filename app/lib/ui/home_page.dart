@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../library/library.dart';
+import '../platform/second_screen.dart';
 import '../platform/files.dart' as files;
 import '../player/player_controller.dart';
 import 'library_panel.dart';
@@ -219,7 +220,7 @@ class _HomePageState extends State<HomePage> {
   Widget _rail() {
     // Rebuilds with the player so the play/pause button stays current.
     return ListenableBuilder(
-      listenable: c,
+      listenable: Listenable.merge([c, secondScreenActive]),
       builder: (context, _) => _railBody(),
     );
   }
@@ -246,24 +247,26 @@ class _HomePageState extends State<HomePage> {
               trailing: Column(
                 children: [
                   const SizedBox(height: 8),
-                  IconButton(
-                    tooltip: c.playing ? 'Pause' : 'Play',
-                    color: Palette.accent,
-                    onPressed: c.current != null || c.playlist.isNotEmpty
-                        ? c.togglePlay
-                        : null,
-                    icon: Icon(
-                      c.playing
-                          ? Icons.pause_circle_filled
-                          : Icons.play_circle_filled,
-                      size: 32,
+                  if (!secondScreenActive.value) ...[
+                    IconButton(
+                      tooltip: c.playing ? 'Pause' : 'Play',
+                      color: Palette.accent,
+                      onPressed: c.current != null || c.playlist.isNotEmpty
+                          ? c.togglePlay
+                          : null,
+                      icon: Icon(
+                        c.playing
+                            ? Icons.pause_circle_filled
+                            : Icons.play_circle_filled,
+                        size: 32,
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Next tune',
-                    onPressed: c.playlist.isEmpty ? null : c.nextTrack,
-                    icon: const Icon(Icons.skip_next_rounded),
-                  ),
+                    IconButton(
+                      tooltip: 'Next tune',
+                      onPressed: c.playlist.isEmpty ? null : c.nextTrack,
+                      icon: const Icon(Icons.skip_next_rounded),
+                    ),
+                  ],
                   PopupMenuButton<String>(
                     tooltip: 'More',
                     icon: const Icon(Icons.more_vert),
