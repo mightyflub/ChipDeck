@@ -94,3 +94,53 @@ jobs:
           flutter pub get
           flutter analyze
           flutter build linux --release
+
+  app-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+      - name: Analyze
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+      - name: Signing key from repository secrets (optional)
+        # With the secrets set, every APK is signed with the same key and
+        # installs as an update. Without them the build uses a debug key.
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        if: env.KEYSTORE_BASE64 != ''
+        working-directory: app/android
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=chipdeck"
+            echo "keyPassword=$KEYSTORE_PASSWORD"
+          } > key.properties
+      - name: Build APK
+        working-directory: app
+        # One APK for all phones (arm64, 32-bit arm, x86_64). The build
+        # number grows with every CI run so each APK installs as an update.
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp app/build/app/outputs/flutter-apk/app-release.apk dist/ChipDeck.apk
+          cp LICENSE dist/LICENSE.txt
+          unzip -l dist/ChipDeck.apk | grep libchipdeck.so
+          rm -f app/android/release.jks app/android/key.properties
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chipdeck-app-android
+          path: dist/

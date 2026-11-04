@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'library/library.dart';
+import 'platform/android_media.dart';
 import 'player/player_controller.dart';
 import 'ui/home_page.dart';
 import 'ui/theme.dart';
@@ -15,6 +16,7 @@ Future<void> main() async {
   library.onSonglengthsFound = (path) => controller.setSonglengths(path);
   // A new Songlengths file changes lengths for every tune: refresh the index.
   controller.onSonglengthsChanged = () => library.rescan(full: true);
+  AndroidMedia.attach(controller);
   runApp(ChipDeckApp(controller: controller, library: library));
   // Pick up tunes added to the archive since last time (only new or
   // changed files are read, so this is quick).

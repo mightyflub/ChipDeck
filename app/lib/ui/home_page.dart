@@ -1,9 +1,9 @@
 // Main window: playlist + now playing, adapting to narrow (phone) widths.
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../library/library.dart';
+import '../platform/files.dart' as files;
 import '../player/player_controller.dart';
 import 'library_panel.dart';
 import 'now_playing.dart';
@@ -56,19 +56,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> pickFiles() async {
-    const group = XTypeGroup(
-      label: 'Chiptunes',
-      extensions: ['sid', 'psid', 'rsid', 'mus', 'prg', 'sndh', 'snd', 'ym'],
-    );
-    final files = await openFiles(acceptedTypeGroups: [group]);
-    if (files.isEmpty) return;
+    final paths = await files.pickTuneFiles(context);
+    if (paths.isEmpty) return;
     final start = c.playlist.length;
-    c.addFiles(files.map((f) => f.path).toList());
+    c.addFiles(paths);
     if (c.current == null && c.playlist.length > start) c.playIndex(start);
   }
 
   Future<void> pickFolder() async {
-    final dir = await getDirectoryPath();
+    final dir = await files.pickFolder(context);
     if (dir == null) return;
     final start = c.playlist.length;
     final n = await c.addFolder(dir);
@@ -129,68 +125,79 @@ class _HomePageState extends State<HomePage> {
       child: LayoutBuilder(
         builder: (context, box) {
           final wide = box.maxWidth >= 860;
-          final playlist = PlaylistPanel(
-            controller: c,
-            onAddFiles: pickFiles,
-            onAddFolder: pickFolder,
-            onPlayed: wide ? null : () => setState(() => _tab = 0),
-          );
-          final library = LibraryPanel(
-            library: lib,
-            player: c,
-            onPlayed: wide ? null : () => setState(() => _tab = 0),
-          );
-          final nowPlaying = NowPlaying(controller: c, compact: !wide);
-          return Scaffold(
-            appBar: _appBar(context),
-            body: c.hasEngine
-                ? (wide
-                      ? Row(
-                          children: [
-                            SizedBox(
-                              width: (box.maxWidth * 0.38).clamp(340, 520),
-                              child: _SidePanel(
-                                index: _side,
-                                onChanged: (i) => setState(() => _side = i),
-                                library: library,
-                                playlist: playlist,
-                                playlistCount: c.playlist.length,
-                              ),
-                            ),
-                            const VerticalDivider(width: 1),
-                            Expanded(child: nowPlaying),
-                          ],
-                        )
-                      : IndexedStack(
-                          index: _tab,
-                          children: [nowPlaying, library, playlist],
-                        ))
-                : _EngineError(message: c.engineError ?? 'Unknown error'),
-            bottomNavigationBar: wide
-                ? null
-                : NavigationBar(
-                    backgroundColor: Palette.panel,
-                    indicatorColor: Palette.accent.withValues(alpha: 0.25),
-                    selectedIndex: _tab,
-                    onDestinationSelected: (i) => setState(() => _tab = i),
-                    destinations: const [
-                      NavigationDestination(
-                        icon: Icon(Icons.graphic_eq),
-                        label: 'Now playing',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.library_music_outlined),
-                        label: 'Library',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.queue_music),
-                        label: 'Playlist',
-                      ),
-                    ],
-                  ),
+          // Phone back button: return to Now playing first.
+          return PopScope(
+            canPop: wide || _tab == 0,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) setState(() => _tab = 0);
+            },
+            child: _body(context, box, wide),
           );
         },
       ),
+    );
+  }
+
+  Widget _body(BuildContext context, BoxConstraints box, bool wide) {
+    final playlist = PlaylistPanel(
+      controller: c,
+      onAddFiles: pickFiles,
+      onAddFolder: pickFolder,
+      onPlayed: wide ? null : () => setState(() => _tab = 0),
+    );
+    final library = LibraryPanel(
+      library: lib,
+      player: c,
+      onPlayed: wide ? null : () => setState(() => _tab = 0),
+    );
+    final nowPlaying = NowPlaying(controller: c, compact: !wide);
+    return Scaffold(
+      appBar: _appBar(context),
+      body: c.hasEngine
+          ? (wide
+                ? Row(
+                    children: [
+                      SizedBox(
+                        width: (box.maxWidth * 0.38).clamp(340, 520),
+                        child: _SidePanel(
+                          index: _side,
+                          onChanged: (i) => setState(() => _side = i),
+                          library: library,
+                          playlist: playlist,
+                          playlistCount: c.playlist.length,
+                        ),
+                      ),
+                      const VerticalDivider(width: 1),
+                      Expanded(child: nowPlaying),
+                    ],
+                  )
+                : IndexedStack(
+                    index: _tab,
+                    children: [nowPlaying, library, playlist],
+                  ))
+          : _EngineError(message: c.engineError ?? 'Unknown error'),
+      bottomNavigationBar: wide
+          ? null
+          : NavigationBar(
+              backgroundColor: Palette.panel,
+              indicatorColor: Palette.accent.withValues(alpha: 0.25),
+              selectedIndex: _tab,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.graphic_eq),
+                  label: 'Now playing',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.library_music_outlined),
+                  label: 'Library',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.queue_music),
+                  label: 'Playlist',
+                ),
+              ],
+            ),
     );
   }
 

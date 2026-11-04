@@ -231,14 +231,15 @@ class LibraryController extends ChangeNotifier {
     scan = const ScanProgress(0, 0, 'Looking for tunes…');
     notifyListeners();
 
-    final known = full
-        ? <String, List<Object>>{}
-        : <String, List<Object>>{for (final t in tracks) t.path: t.toJson()};
+    final known = <String, List<Object>>{
+      for (final t in tracks) t.path: t.toJson(),
+    };
     final port = ReceivePort();
     final args = _ScanArgs(
       port.sendPort,
       List.of(roots),
       known,
+      full,
       songlengthsPath?.call(),
     );
     await Isolate.spawn(
@@ -346,17 +347,26 @@ Map<String, dynamic> _decode(String path) =>
     jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
 
 class _ScanArgs {
-  _ScanArgs(this.port, this.roots, this.known, this.songlengths);
+  _ScanArgs(this.port, this.roots, this.known, this.full, this.songlengths);
   final SendPort port;
   final List<String> roots;
   final Map<String, List<Object>> known;
+  final bool full; // re-read every file instead of reusing unchanged ones
   final String? songlengths;
 }
 
 void _scanWorker(_ScanArgs a) {
   final files = <File>[];
+  // Locations that could not be read (offline drive, SD card removed, storage
+  // permission revoked on Android): keep their old index instead of
+  // dropping every tune in them.
+  final unreadable = <String>[];
   for (final r in a.roots) {
     try {
+      if (!Directory(r).existsSync()) {
+        unreadable.add(r);
+        continue;
+      }
       for (final e in Directory(
         r,
       ).listSync(recursive: true, followLinks: false)) {
@@ -366,7 +376,7 @@ void _scanWorker(_ScanArgs a) {
         }
       }
     } catch (_) {
-      // Unreadable folder or offline drive: keep going.
+      unreadable.add(r);
     }
   }
   a.port.send(['progress', 0, files.length]);
@@ -374,13 +384,15 @@ void _scanWorker(_ScanArgs a) {
   final native = ChipDeckNative.open();
   final out = <List<Object>>[];
   var changed = 0;
+  final seen = <String>{};
   for (var i = 0; i < files.length; i++) {
     final f = files[i];
     try {
       final st = f.statSync();
       final size = st.size;
       final mtime = st.modified.millisecondsSinceEpoch;
-      final old = a.known[f.path];
+      seen.add(f.path);
+      final old = a.full ? null : a.known[f.path];
       if (old != null && old[7] == size && old[8] == mtime) {
         out.add(old);
       } else {
@@ -405,6 +417,11 @@ void _scanWorker(_ScanArgs a) {
       }
     } catch (_) {}
     if (i % 250 == 0) a.port.send(['progress', i, files.length]);
+  }
+  for (final e in a.known.entries) {
+    if (!seen.contains(e.key) && unreadable.any((r) => p.isWithin(r, e.key))) {
+      out.add(e.value);
+    }
   }
   Isolate.exit(a.port, ['done', out, changed]);
 }

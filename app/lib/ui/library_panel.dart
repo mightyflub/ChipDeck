@@ -1,11 +1,11 @@
 // Library: saved archive locations, folder browser and search.
 import 'dart:async';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../library/library.dart';
+import '../platform/files.dart' as files;
 import '../player/player_controller.dart';
 import 'theme.dart';
 
@@ -110,7 +110,10 @@ class _LibraryPanelState extends State<LibraryPanel> {
   }
 
   Future<void> _addLocation() async {
-    final dir = await getDirectoryPath(confirmButtonText: 'Add to library');
+    final dir = await files.pickFolder(
+      context,
+      confirmButtonText: 'Add to library',
+    );
     if (dir != null) await lib.addRoot(dir);
   }
 

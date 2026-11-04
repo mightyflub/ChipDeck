@@ -1,8 +1,8 @@
 // Settings: SID model, Songlengths database, default length, about.
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../native/chipdeck_ffi.dart';
+import '../platform/files.dart' as files;
 import '../player/player_controller.dart';
 import 'theme.dart';
 
@@ -77,15 +77,12 @@ class SettingsDialog extends StatelessWidget {
                       const SizedBox(width: 8),
                       OutlinedButton(
                         onPressed: () async {
-                          final f = await openFile(
-                            acceptedTypeGroups: const [
-                              XTypeGroup(
-                                label: 'Songlengths',
-                                extensions: ['md5', 'txt'],
-                              ),
-                            ],
+                          final f = await files.pickSingleFile(
+                            context,
+                            label: 'Songlengths',
+                            extensions: ['md5', 'txt'],
                           );
-                          if (f != null) c.setSonglengths(f.path);
+                          if (f != null) c.setSonglengths(f);
                         },
                         child: const Text('Choose…'),
                       ),
