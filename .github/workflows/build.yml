@@ -118,10 +118,16 @@ jobs:
       - name: Signing key from repository secrets (optional)
         # With the secrets set, every APK is signed with the same key and
         # installs as an update. Without them the build uses a debug key.
-        if: env.KEYSTORE_BASE64 != ''
         working-directory: app/android
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+          echo "ANDROID_KEYSTORE_BASE64: $([ -n "$KEYSTORE_BASE64" ] && echo set || echo missing)"
+          echo "ANDROID_KEYSTORE_PASSWORD: $([ -n "$KEYSTORE_PASSWORD" ] && echo set || echo missing)"
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::warning::Signing secrets not available; APK is signed with a debug key."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > release.jks
+          keytool -list -keystore release.jks -storepass "$KEYSTORE_PASSWORD" | grep -i "entry"
           {
             echo "storeFile=release.jks"
             echo "storePassword=$KEYSTORE_PASSWORD"
@@ -139,6 +145,7 @@ jobs:
           cp app/build/app/outputs/flutter-apk/app-release.apk dist/ChipDeck.apk
           cp LICENSE dist/LICENSE.txt
           unzip -l dist/ChipDeck.apk | grep libchipdeck.so
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs dist/ChipDeck.apk | grep -i "subject" | head -1 || true
           rm -f app/android/release.jks app/android/key.properties
       - uses: actions/upload-artifact@v4
         with:
