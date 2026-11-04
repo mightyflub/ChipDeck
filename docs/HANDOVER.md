@@ -184,7 +184,7 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
   them (`--kernal/--basic/--chargen`). Commodore ROMs are copyrighted, so
   we should ship open replacement ROMs or let users point to their own.
 - Only .sid (PSID/RSID) tested. libsidplayfp also loads .prg/.p00/.mus.
-- SNDH/YM: tested only with our own generated tunes in the cloud. No
+- SNDH/YM: confirmed working on Stephen's Windows PC (2026-11-04). No
   seeking yet. Mono output (as on the ST's YM chip; STE DAC stereo is folded
   to mono by AtariAudio). AtariAudio's SNDH header parser trusts the header
   size, so a truncated file could read past its buffer; fine for real
