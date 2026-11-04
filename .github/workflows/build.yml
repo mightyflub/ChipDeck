@@ -1,0 +1,44 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (MSVC)
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Render test tune to WAV
+        run: build\Release\chipdeck-cli.exe -t 5 -w test.wav tests\data\chipdeck-test.sid
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build\Release\chipdeck-cli.exe dist\
+          Copy-Item tests\data\chipdeck-test.sid dist\
+          Copy-Item LICENSE dist\LICENSE.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chipdeck-cli-windows-x64
+          path: dist/
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Render test tune to WAV
+        run: ./build/chipdeck-cli -t 5 -w test.wav tests/data/chipdeck-test.sid
