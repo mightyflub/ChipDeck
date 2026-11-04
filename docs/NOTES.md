@@ -144,3 +144,30 @@ plan (no code yet) for .sndh and .ym support. Full plan:
 - Could not compile-test AtariAudio in this session (building third-party
   code was blocked in the cloud sandbox). First coding step should build it
   with MSVC and the NDK.
+
+## 2026-11-04: SNDH and YM playback in core and CLI
+
+Stephen asked for "a command line player test like we did for the sid files".
+
+- Vendored AtariAudio 1.27 (`third_party/atariaudio`, tag 1.27 = commit
+  f68f058) and added a CMake target `atariaudio`. Builds with no warnings
+  to fix on GCC 13 and MinGW-w64 13; MSVC is covered by CI.
+- `core/src/atari_backend.{h,cpp}`: `isAtariTune()` (same magic checks as
+  AtariAudio's own QuickFileTypeCheck) and `AtariTune` (load, subtunes,
+  length, mono to stereo, position). `chipdeck.cpp` dispatches to it in
+  every C API call; the SID code is unchanged. `cd_info` layout is
+  unchanged because the Flutter app maps it with dart:ffi.
+- Our own test tunes (`tools/make_test_atari.py`): an SNDH with a
+  hand-assembled 68000 driver (2 subtunes, ~492 Hz and ~984 Hz square
+  waves, FRMS lengths 20 s and 30 s) and a 10 s YM5 file. Rendering them
+  gives exactly the expected pitches, which also proves the 68000, YM
+  ports and SNDH header parsing work.
+- Lengths: SNDH "50 Hz" ticks are the real ST VBL rate (~50.05 Hz), so
+  1000 ticks = 19958 ms, not 20000. Tests allow 100 ms.
+- Sanitizers: ASan clean. GCC UBSan `bounds` reports an out-of-range index
+  at `m68k.cpp:55` (the opcode jump table). In gdb the opcode (REG_IR) is
+  0x6000, which is valid, so this is a false report about the
+  pointer-to-member array, not a real bug. Clang's sanitizer runtime is
+  not installed in the container, so this could not be cross-checked there.
+- Could not run the Windows .exe in the container (no Wine); MinGW build
+  links fine and CI runs the tests with MSVC.

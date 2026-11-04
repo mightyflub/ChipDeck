@@ -4,6 +4,7 @@
 | --- | --- | --- | --- |
 | libsidplayfp | 3.1.2 | GPL-2.0-or-later | release tarball from https://github.com/libsidplayfp/libsidplayfp/releases/tag/v3.1.2 |
 | libresidfp (reSIDfp) | 1.2.3 | GPL-2.0-or-later | release tarball from https://github.com/libsidplayfp/libresidfp/releases/tag/v1.2.3 |
+| AtariAudio | 1.27 | MIT (includes Musashi 68000 core, MIT-style; ICE depacker, public domain; LZH depacker; timedb song lengths from the sc68 project) | `git archive 1.27 src LICENSE README.md` of https://github.com/arnaud-carre/AtariAudio |
 | miniaudio | 0.11.26 | Public domain / MIT-0 | https://github.com/mackron/miniaudio/tree/0.11.26 |
 
 Why vendored release tarballs instead of git submodules: the tarballs ship the
