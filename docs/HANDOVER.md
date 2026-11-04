@@ -193,7 +193,10 @@ Library locations are picked with the system folder picker; internal
 storage and SD cards work, cloud folders do not (single files from Drive
 etc. are copied into the app).
 
-Signing: without secrets, CI signs with a throwaway debug key, so a newer
+Signing: the secrets below were set up on 2026-11-04 (Stephen keeps
+chipdeck.jks, alias chipdeck), so CI APKs from then on install as updates.
+The quick `android-signing-check` CI job shows whether the secrets arrive
+and unlock the key. Without secrets, CI signs with a throwaway debug key, so a newer
 APK only installs after uninstalling the old one (which clears the library
 and settings). To get in-place updates, create a key once and add two
 repository secrets (Settings > Secrets and variables > Actions):
