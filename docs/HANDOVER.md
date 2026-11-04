@@ -58,7 +58,8 @@ and the version is given whenever a build is shared.
   third_party/README.md). New `cd_info.system` (C64/Atari ST/Amiga/PC).
   App: .mod/.xm (and "mod.*" names) in pickers and library, MOD filter,
   badges. Details: NOTES.md (2026-11-04, Amiga MOD and Fasttracker 2 XM).
-  Waiting for Stephen to try real modules on the Ayn Thor.
+  Stephen confirmed MOD playback works on Windows (0.7.0-test.68,
+  2026-11-04); XM not yet tried on real files. Merged to main.
 - **STIL tune info (0.6.0, branch claude/project-thread-lcoe5w):** for SID
   tunes, Now playing shows HVSC STIL.txt notes (current subtune: titles,
   artists, comments of covers; the whole tune; the composer's or group's
@@ -382,8 +383,8 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
-0. MOD/XM (0.7.0): Stephen tries real modules on the Ayn Thor (classic
-   4-channel Protracker MOD, 8-channel MOD, big XM, a PowerPacked mod).
+0. MOD/XM (0.7.0): MOD confirmed on Windows. Still to try: real XM files
+   (Stephen will later), 8-channel MOD, PowerPacked mod, the Ayn Thor.
    Then: maybe .s3m/.it/.med, seeking, showing instrument names per channel.
 
 1. Stephen confirmed the Windows app and the library/search work (2026-11-04:

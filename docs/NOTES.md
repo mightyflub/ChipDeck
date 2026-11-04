@@ -458,3 +458,8 @@ channels-xm.png and landscape-channels-mod.png.
 Not tested in the cloud: real MOD/XM collections (Modland/AMP are not
 reachable here). Worth trying on Stephen's devices: a classic Protracker
 MOD, an 8-channel MOD, a big XM (20+ channels), and a PowerPacked mod.
+
+Library filter chip shortened to "MOD / XM" (the long label overran the
+wide layout); the chip row now scrolls sideways when narrow. Stephen
+confirmed MOD playback on Windows (0.7.0-test.68); XM untested on real
+files for now, merged on his say-so.
