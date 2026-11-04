@@ -277,3 +277,10 @@ Untested on hardware: the Thor may not report its bottom screen as a
 presentation display, which is why any non-own display is used as a
 fallback. A setting turns it off.
 
+Second try (0.4.0-test.52): the controls work, but going to the background
+or closing ChipDeck changed only one screen, and Android could then reopen
+ChipDeck on the bottom screen with the controls on top, with no way to get
+both back. Now the controls come down when the activity stops and go up
+again when it starts, only when ChipDeck is on the main display, and their
+window is not focusable (touch still works).
+

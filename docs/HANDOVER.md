@@ -197,7 +197,10 @@ transport and subtune buttons. The controls are a second Flutter engine
 by `SecondScreen.kt`; state and actions go through MainActivity
 (`controlsState` / `controlsAction`, see `lib/platform/remote_controls.dart`
 and `android_media.dart`). Setting: "Controls on second screen" (on by
-default). Not yet tried on a real dual-screen device.
+default). The controls show only while ChipDeck is in the foreground and
+on the main display (in the background the notification has the controls),
+and their window never takes key focus, so the handheld's buttons stay with
+the main screen. Working on the Ayn Thor since 0.4.0-test.52.
 
 App features: playlist (files or whole folders, searchable, remembered
 between runs), now playing (title, author, released, PSID/RSID, 6581/8580,
