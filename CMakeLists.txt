@@ -13,6 +13,11 @@ if(MSVC)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
 endif()
 
+if(WIN32)
+  # windows.h must not define min/max macros (they break std::min).
+  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 option(CHIPDECK_BUILD_CLI "Build the chipdeck-cli test player" ON)
 option(CHIPDECK_BUILD_TESTS "Build tests" ON)
 
@@ -29,17 +34,19 @@ target_link_libraries(chipdeck-core PRIVATE sidplayfp atariaudio)
 option(CHIPDECK_BUILD_SHARED "Build the chipdeck shared library" ON)
 if(CHIPDECK_BUILD_SHARED)
   set_target_properties(residfp sidplayfp miniaudio atariaudio PROPERTIES POSITION_INDEPENDENT_CODE ON)
-  add_library(chipdeck SHARED core/src/chipdeck.cpp core/src/atari_backend.cpp
-                              core/src/chipdeck_audio.cpp)
-  target_include_directories(chipdeck PUBLIC core/include)
-  target_compile_definitions(chipdeck
+  add_library(chipdeck-shared SHARED core/src/chipdeck.cpp core/src/atari_backend.cpp
+                                     core/src/chipdeck_audio.cpp)
+  target_include_directories(chipdeck-shared PUBLIC core/include)
+  target_compile_definitions(chipdeck-shared
     PUBLIC CHIPDECK_SHARED
     PRIVATE CHIPDECK_VERSION="${PROJECT_VERSION}")
-  set_target_properties(chipdeck PROPERTIES
+  # Target is chipdeck-shared (the Flutter app's executable is called chipdeck);
+  # the file is chipdeck.dll / libchipdeck.so.
+  set_target_properties(chipdeck-shared PROPERTIES OUTPUT_NAME chipdeck
     CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
-  target_link_libraries(chipdeck PRIVATE sidplayfp atariaudio miniaudio)
+  target_link_libraries(chipdeck-shared PRIVATE sidplayfp atariaudio miniaudio)
   if(MINGW)
-    target_link_options(chipdeck PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(chipdeck-shared PRIVATE -static -static-libgcc -static-libstdc++)
   endif()
 endif()
 
