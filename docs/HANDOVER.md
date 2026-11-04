@@ -209,8 +209,8 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
-1. Stephen confirmed the Windows app works (2026-11-04). Library/search
-   added next; waiting for his feedback on it with his real archive.
+1. Stephen confirmed the Windows app and the library/search work (2026-11-04:
+   "works well enough for now. I like it"). Next: merge PR #2, then Android.
    Still worth testing real HVSC tunes: an RSID digi tune and a 2SID tune.
 2. Android: add `externalNativeBuild` to `app/android/app/build.gradle.kts`
    pointing at the repo root CMakeLists (`CHIPDECK_BUILD_CLI=OFF`,
