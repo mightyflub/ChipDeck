@@ -151,32 +151,47 @@ class _HomePageState extends State<HomePage> {
       onPlayed: wide ? null : () => setState(() => _tab = 0),
     );
     final nowPlaying = NowPlaying(controller: c, compact: !wide);
-    return Scaffold(
-      appBar: _appBar(context),
-      body: c.hasEngine
-          ? (wide
-                ? Row(
-                    children: [
-                      SizedBox(
-                        width: (box.maxWidth * 0.38).clamp(340, 520),
-                        child: _SidePanel(
-                          index: _side,
-                          onChanged: (i) => setState(() => _side = i),
-                          library: library,
-                          playlist: playlist,
-                          playlistCount: c.playlist.length,
-                        ),
+    // Short screens (phones and handhelds in landscape): a side rail
+    // replaces the title bar and the bottom bar, leaving the height for
+    // lists.
+    final short = !wide && box.maxHeight < 560;
+    final content = c.hasEngine
+        ? (wide
+              ? Row(
+                  children: [
+                    SizedBox(
+                      width: (box.maxWidth * 0.38).clamp(340, 520),
+                      child: _SidePanel(
+                        index: _side,
+                        onChanged: (i) => setState(() => _side = i),
+                        library: library,
+                        playlist: playlist,
+                        playlistCount: c.playlist.length,
                       ),
-                      const VerticalDivider(width: 1),
-                      Expanded(child: nowPlaying),
-                    ],
-                  )
-                : IndexedStack(
-                    index: _tab,
-                    children: [nowPlaying, library, playlist],
-                  ))
-          : _EngineError(message: c.engineError ?? 'Unknown error'),
-      bottomNavigationBar: wide
+                    ),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: nowPlaying),
+                  ],
+                )
+              : IndexedStack(
+                  index: _tab,
+                  children: [nowPlaying, library, playlist],
+                ))
+        : _EngineError(message: c.engineError ?? 'Unknown error');
+    return Scaffold(
+      appBar: short ? null : _appBar(context),
+      body: short
+          ? SafeArea(
+              child: Row(
+                children: [
+                  _rail(),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: content),
+                ],
+              ),
+            )
+          : content,
+      bottomNavigationBar: wide || short
           ? null
           : NavigationBar(
               backgroundColor: Palette.panel,
@@ -198,6 +213,110 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _rail() {
+    // Rebuilds with the player so the play/pause button stays current.
+    return ListenableBuilder(
+      listenable: c,
+      builder: (context, _) => _railBody(),
+    );
+  }
+
+  Widget _railBody() {
+    return LayoutBuilder(
+      builder: (context, box) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: box.maxHeight),
+          child: IntrinsicHeight(
+            child: NavigationRail(
+              backgroundColor: Palette.panel,
+              indicatorColor: Palette.accent.withValues(alpha: 0.25),
+              minWidth: 60,
+              labelType: NavigationRailLabelType.none,
+              groupAlignment: -0.6,
+              selectedIndex: _tab,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              leading: const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: _Logo(),
+              ),
+              // Play/pause and next stay reachable from every tab.
+              trailing: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  IconButton(
+                    tooltip: c.playing ? 'Pause' : 'Play',
+                    color: Palette.accent,
+                    onPressed: c.current != null || c.playlist.isNotEmpty
+                        ? c.togglePlay
+                        : null,
+                    icon: Icon(
+                      c.playing
+                          ? Icons.pause_circle_filled
+                          : Icons.play_circle_filled,
+                      size: 32,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Next tune',
+                    onPressed: c.playlist.isEmpty ? null : c.nextTrack,
+                    icon: const Icon(Icons.skip_next_rounded),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'More',
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (v) {
+                      switch (v) {
+                        case 'files':
+                          pickFiles();
+                        case 'folder':
+                          pickFolder();
+                        case 'settings':
+                          showDialog<void>(
+                            context: context,
+                            builder: (_) => SettingsDialog(controller: c),
+                          );
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'files',
+                        enabled: c.hasEngine,
+                        child: const Text('Add files'),
+                      ),
+                      PopupMenuItem(
+                        value: 'folder',
+                        enabled: c.hasEngine,
+                        child: const Text('Add folder'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'settings',
+                        child: Text('Settings'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              destinations: const [
+                NavigationRailDestination(
+                  icon: Icon(Icons.graphic_eq),
+                  label: Text('Now playing'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.library_music_outlined),
+                  label: Text('Library'),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.queue_music),
+                  label: Text('Playlist'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

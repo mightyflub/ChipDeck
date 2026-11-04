@@ -123,25 +123,38 @@ class _LibraryPanelState extends State<LibraryPanel> {
       color: Palette.panel,
       child: ListenableBuilder(
         listenable: Listenable.merge([lib, player]),
-        builder: (context, _) {
-          final searching =
-              _query.trim().isNotEmpty || _filter != FormatFilter.all;
-          return Column(
-            children: [
-              _header(context),
-              if (lib.scan != null) _ScanBar(scan: lib.scan!),
-              if (lib.roots.isNotEmpty) _searchBox(),
-              const Divider(height: 1),
-              Expanded(
-                child: lib.roots.isEmpty
-                    ? _NoLocations(onAdd: _addLocation)
-                    : searching
-                    ? _resultsList()
-                    : _browser(),
-              ),
-            ],
-          );
-        },
+        builder: (context, _) => LayoutBuilder(
+          builder: (context, box) {
+            final searching =
+                _query.trim().isNotEmpty || _filter != FormatFilter.all;
+            // Short screens (phones and handhelds in landscape): one toolbar
+            // row instead of header + search box + filter chips + results
+            // header, so most of the height goes to the list.
+            final compact = box.maxHeight < 480;
+            // Wide enough for one line per tune (title, composer, year...).
+            final dense = box.maxWidth >= 560;
+            final results = searching ? _currentResults() : null;
+            return Column(
+              children: [
+                if (compact && lib.roots.isNotEmpty)
+                  _compactBar(context, results)
+                else ...[
+                  _header(context),
+                  if (lib.roots.isNotEmpty) _searchBox(),
+                ],
+                if (lib.scan != null) _ScanBar(scan: lib.scan!),
+                const Divider(height: 1),
+                Expanded(
+                  child: lib.roots.isEmpty
+                      ? _NoLocations(onAdd: _addLocation)
+                      : results != null
+                      ? _resultsList(results, header: !compact, dense: dense)
+                      : _browser(dense: dense),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -180,43 +193,126 @@ class _LibraryPanelState extends State<LibraryPanel> {
     );
   }
 
+  Widget _searchField({required String hint}) {
+    return TextField(
+      controller: _search,
+      onChanged: _onQuery,
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        prefixIcon: const Icon(Icons.search, size: 20),
+        suffixIcon: _search.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: () {
+                  _search.clear();
+                  _onQuery('');
+                },
+              ),
+        filled: true,
+        fillColor: Palette.background,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  static const _filters = [
+    (FormatFilter.all, 'All', 'All formats'),
+    (FormatFilter.sid, 'C64', 'C64 SID'),
+    (FormatFilter.atari, 'ST', 'Atari ST'),
+  ];
+
+  /// Everything on one row: search, format filter, match count and actions.
+  Widget _compactBar(BuildContext context, List<LibraryTrack>? results) {
+    const muted = TextStyle(
+      color: Palette.textMuted,
+      fontSize: 12,
+      fontFeatures: tabular,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: _searchField(hint: 'Search ${lib.tracks.length} tunes'),
+          ),
+          const SizedBox(width: 6),
+          SegmentedButton<FormatFilter>(
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            segments: [
+              for (final (f, short, long) in _filters)
+                ButtonSegment(value: f, label: Text(short), tooltip: long),
+            ],
+            selected: {_filter},
+            onSelectionChanged: (v) {
+              _filter = v.first;
+              _runSearch();
+            },
+          ),
+          if (results != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              results.length >= 1000 ? '1000+' : '${results.length}',
+              style: muted,
+            ),
+            IconButton(
+              tooltip: 'Play all matches',
+              visualDensity: VisualDensity.compact,
+              onPressed: results.isEmpty
+                  ? null
+                  : () => _playMany(results, replace: true),
+              icon: const Icon(Icons.play_arrow),
+            ),
+            IconButton(
+              tooltip: 'Add all matches to playlist',
+              visualDensity: VisualDensity.compact,
+              onPressed: results.isEmpty
+                  ? null
+                  : () => _playMany(results, replace: false),
+              icon: const Icon(Icons.playlist_add, size: 20),
+            ),
+          ] else ...[
+            IconButton(
+              tooltip: 'Rescan library',
+              visualDensity: VisualDensity.compact,
+              onPressed: lib.isScanning ? null : () => lib.rescan(),
+              icon: const Icon(Icons.refresh, size: 20),
+            ),
+            IconButton(
+              tooltip: 'Music locations',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) =>
+                    _LocationsDialog(library: lib, onAdd: _addLocation),
+              ),
+              icon: const Icon(Icons.folder_special_outlined, size: 20),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _searchBox() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Column(
         children: [
-          TextField(
-            controller: _search,
-            onChanged: _onQuery,
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: 'Search title, composer, group or year',
-              prefixIcon: const Icon(Icons.search, size: 20),
-              suffixIcon: _search.text.isEmpty
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      onPressed: () {
-                        _search.clear();
-                        _onQuery('');
-                      },
-                    ),
-              filled: true,
-              fillColor: Palette.background,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
+          _searchField(hint: 'Search title, composer, group or year'),
           const SizedBox(height: 8),
           Row(
             children: [
-              for (final (f, label) in const [
-                (FormatFilter.all, 'All'),
-                (FormatFilter.sid, 'C64 SID'),
-                (FormatFilter.atari, 'Atari ST'),
-              ])
+              for (final (f, _, label) in _filters)
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: ChoiceChip(
@@ -236,8 +332,11 @@ class _LibraryPanelState extends State<LibraryPanel> {
     );
   }
 
-  Widget _resultsList() {
-    final r = _currentResults();
+  Widget _resultsList(
+    List<LibraryTrack> r, {
+    required bool header,
+    required bool dense,
+  }) {
     if (r.isEmpty) {
       return const Center(
         child: Text('No matches.', style: TextStyle(color: Palette.textMuted)),
@@ -245,38 +344,45 @@ class _LibraryPanelState extends State<LibraryPanel> {
     }
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
-          child: Row(
-            children: [
-              Text(
-                r.length >= 1000 ? 'First 1000 matches' : '${r.length} matches',
-                style: const TextStyle(color: Palette.textMuted, fontSize: 12),
-              ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () => _playMany(r, replace: true),
-                icon: const Icon(Icons.play_arrow, size: 18),
-                label: const Text('Play all'),
-              ),
-              IconButton(
-                tooltip: 'Add all to playlist',
-                onPressed: () => _playMany(r, replace: false),
-                icon: const Icon(Icons.playlist_add, size: 20),
-              ),
-            ],
+        if (header)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+            child: Row(
+              children: [
+                Text(
+                  r.length >= 1000
+                      ? 'First 1000 matches'
+                      : '${r.length} matches',
+                  style: const TextStyle(
+                    color: Palette.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => _playMany(r, replace: true),
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: const Text('Play all'),
+                ),
+                IconButton(
+                  tooltip: 'Add all to playlist',
+                  onPressed: () => _playMany(r, replace: false),
+                  icon: const Icon(Icons.playlist_add, size: 20),
+                ),
+              ],
+            ),
           ),
-        ),
         Expanded(
           child: Scrollbar(
             controller: _scroll,
             child: ListView.builder(
               controller: _scroll,
               itemCount: r.length,
-              itemExtent: 56,
+              itemExtent: dense ? _TrackRow.denseExtent : 56,
               itemBuilder: (context, i) => _TrackRow(
                 track: r[i],
                 showFolder: true,
+                dense: dense,
                 isCurrent: player.current?.path == r[i].path,
                 onPlay: () => _playTrack(r[i]),
                 onAdd: () => _addTrack(r[i]),
@@ -288,7 +394,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
     );
   }
 
-  Widget _browser() {
+  Widget _browser({required bool dense}) {
     final dir = _dir;
     final folder = dir == null ? null : lib.folder(dir);
     if (dir != null && folder == null) {
@@ -323,7 +429,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
             child: ListView.builder(
               controller: _scroll,
               itemCount: children.length + trackIdx.length,
-              itemExtent: 52,
+              itemExtent: dense ? 44 : 52,
               itemBuilder: (context, i) {
                 if (i < children.length) {
                   final c = children[i];
@@ -341,6 +447,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
                 return _TrackRow(
                   track: t,
                   showFolder: false,
+                  dense: dense,
                   isCurrent: player.current?.path == t.path,
                   onPlay: () => _playTrack(t),
                   onAdd: () => _addTrack(t),
@@ -606,16 +713,24 @@ class _TrackRow extends StatelessWidget {
     required this.isCurrent,
     required this.onPlay,
     required this.onAdd,
+    this.dense = false,
   });
+
+  /// Row height for the one-line layout.
+  static const double denseExtent = 40;
 
   final LibraryTrack track;
   final bool showFolder;
+
+  /// One line per tune with columns (wide lists), instead of two lines.
+  final bool dense;
   final bool isCurrent;
   final VoidCallback onPlay;
   final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
+    if (dense) return _buildDense(context);
     final t = track;
     final sub = [
       if (t.author.isNotEmpty) t.author,
@@ -714,6 +829,118 @@ class _TrackRow extends StatelessWidget {
       ),
     );
   }
+}
+
+extension on _TrackRow {
+  Widget _buildDense(BuildContext context) {
+    final t = track;
+    const muted = TextStyle(color: Palette.textMuted, fontSize: 12);
+    const num = TextStyle(
+      color: Palette.textMuted,
+      fontSize: 12,
+      fontFeatures: tabular,
+    );
+    final folder = showFolder ? _folderLabel(t) : '';
+    return Material(
+      color: isCurrent
+          ? Palette.accent.withValues(alpha: 0.12)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: onPlay,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 34,
+                child: Text(
+                  t.kind,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: t.sidChips == 0 ? Palette.warm : Palette.scope,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 5,
+                child: Text(
+                  t.displayTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isCurrent ? Palette.accent : Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  t.author,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: muted,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 40,
+                child: Text(_year(t.released), maxLines: 1, style: num),
+              ),
+              if (showFolder) ...[
+                const SizedBox(width: 6),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    folder,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted,
+                  ),
+                ),
+              ],
+              SizedBox(
+                width: 44,
+                child: Text(
+                  t.lengthMs > 0 ? formatMs(t.lengthMs) : '',
+                  textAlign: TextAlign.right,
+                  style: num,
+                ),
+              ),
+              SizedBox(
+                width: 34,
+                child: Text(
+                  t.subtunes > 1 ? '×${t.subtunes}' : '',
+                  textAlign: TextAlign.right,
+                  style: num,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Add to playlist',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(
+                  Icons.playlist_add,
+                  size: 20,
+                  color: Palette.textMuted,
+                ),
+                onPressed: onAdd,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The year from a "released" string like "1987 Hubbard" (else the start).
+String _year(String released) {
+  final m = RegExp(r'(19|20)\d\d').firstMatch(released);
+  if (m != null) return m.group(0)!;
+  return released.length <= 4 ? released : released.substring(0, 4);
 }
 
 /// Folder name for search results, skipped when it just repeats the author

@@ -245,3 +245,17 @@ both; platform code is kept small and behind `app/lib/platform/`.
   with a per-run debug key (then each new APK needs an uninstall first).
 - Not verifiable in the container: the Android SDK/NDK hosts
   (dl.google.com) are blocked, so the APK is built only in CI.
+
+## 2026-11-04: Landscape layout (Ayn Thor)
+
+Stephen tried the APK on his Ayn Thor: it works (library, SID playback in
+the background), but search showed hardly any results on the landscape top
+screen, and he asked for the whole UI to suit landscape. At ~731x411 dp
+the old phone layout spent ~330 dp on chrome (title bar, library header,
+search box, filter chips, results header, bottom bar), leaving room for
+about one result. Now (same code on all platforms, by window size):
+side rail instead of title and bottom bars, single-row toolbars, 40 dp
+one-line rows with columns, and a two-column Now playing that fits without
+scrolling. Search shows 9 rows at 731x411 instead of ~1. Wide desktop and
+portrait layouts are unchanged (checked with screenshots under Xvfb using
+the new CHIPDECK_WINDOW size override in the Linux runner).

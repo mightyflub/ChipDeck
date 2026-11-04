@@ -174,6 +174,17 @@ folder) with a C64/Atari filter. If a location contains
 DOCUMENTS/Songlengths.md5 it is picked up automatically.
 Code: `app/lib/library/library.dart`, `app/lib/ui/library_panel.dart`.
 
+Layouts (shared by every platform, chosen by window size in
+`home_page.dart`): wide (>= 860 dp: side panel + now playing), portrait
+phone (bottom bar), and short landscape (< 560 dp high, e.g. Ayn Thor top
+screen ~731x411 dp): a side rail with play/pause and next instead of the
+title and bottom bars, one-row toolbars in Library and Playlist, one-line
+list rows with columns (title, composer, year, folder, length, subtunes)
+whenever a list is >= 560 dp wide, and a two-column Now playing (details
+and controls left, scope and voices right). To check a layout on Linux:
+`CHIPDECK_WINDOW=731x411 build/linux/x64/release/bundle/chipdeck`.
+Screenshots: docs/screenshots/landscape-*.png.
+
 App features: playlist (files or whole folders, searchable, remembered
 between runs), now playing (title, author, released, PSID/RSID, 6581/8580,
 PAL/NTSC, 2SID/3SID), oscilloscope, per-voice activity (waveform, note,
