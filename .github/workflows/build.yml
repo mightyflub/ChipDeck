@@ -1,9 +1,19 @@
 name: build
 
+# Pull requests build everything except the Windows app (test APKs come
+# from these runs). main and v* tags build everything too. To get a Windows
+# test build of a branch: Actions > build > Run workflow, tick "windows".
 on:
   push:
+    branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      windows:
+        description: Build the Windows app too
+        type: boolean
+        default: false
 
 jobs:
   windows:
@@ -52,6 +62,7 @@ jobs:
           ./build/chipdeck-cli -t 5 -w test-ym.wav tests/data/chipdeck-test.ym
 
   app-windows:
+    if: github.event_name == 'push' || inputs.windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
