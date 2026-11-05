@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Works out the version of a CI build and writes it to $GITHUB_ENV:
-#   CHIPDECK_VERSION  e.g. 0.4.0 (release, from a v0.4.0 tag) or
-#                     0.4.0-test.57 (any other build)
+#   CHIPDECK_VERSION  e.g. 0.4.0 (release: a v0.4.0 tag, or a manual run
+#                     on main with "release" ticked, CHIPDECK_RELEASE=true)
+#                     or 0.4.0-test.57 (any other build)
 #   CHIPDECK_BUILD    the CI run number (Android versionCode, Windows build)
 # The base version is the one in app/pubspec.yaml; bump it there.
 set -euo pipefail
@@ -12,6 +13,12 @@ if [[ "$ref" == refs/tags/v* ]]; then
   tag="${ref#refs/tags/v}"
   if [[ "$tag" != "$base" ]]; then
     echo "::error::Tag v$tag does not match pubspec version $base"
+    exit 1
+  fi
+  version="$base"
+elif [[ "${CHIPDECK_RELEASE:-}" == "true" ]]; then
+  if [[ "$ref" != refs/heads/main ]]; then
+    echo "::error::Releases are made from main only (this run is on $ref)"
     exit 1
   fi
   version="$base"

@@ -716,3 +716,25 @@ made-up data, and no ROMs or HVSC/SNDH archive files are bundled. All
 third-party code is GPL-2.0+, MIT or public domain. The workflow now sets
 `permissions: contents: read`. Keep personal folder paths out of these
 notes; write `<music folder>` instead.
+
+## 2026-11-05: GitHub releases and README build instructions
+
+Stephen asked for a release build on GitHub, and for build instructions
+for every platform on the front page, saying which are tested.
+
+- Release path in `.github/workflows/build.yml`: a "release" input on
+  manual runs (main only, checked in `tools/ci-version.sh`) or a v* tag
+  makes a plain-version build; a new `release` job waits for every build,
+  downloads the app artifacts, zips the Windows folder, renames the APK,
+  writes SHA256 sums and runs `gh release create`. It is the only job with
+  `contents: write`; everything else stays read-only (public repo). A
+  release APK must be signed with the release key (the job fails rather
+  than ship a debug-signed APK, which would not install over earlier
+  builds). Chosen over pushing tags from Claude's container so a release is
+  one button for Stephen too.
+- The release tag is made by the workflow token, so it does not start a
+  second "build" run (GitHub never triggers workflows from that token).
+- README: download links, a table of platforms with tested/untested
+  status, and build steps for Windows (CLI, app), Android, Linux (CLI,
+  app), MinGW cross-compile, macOS CLI (untested, no Mac), and a note that
+  macOS/iOS apps would need new Flutter runners.
