@@ -101,8 +101,8 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
         final n = c.addListToPlaylist(id);
         _say(
           n == 0
-              ? 'Those tunes are already in the playlist.'
-              : 'Added $n tunes to the playlist.',
+              ? 'Those tunes are already in Playing Now.'
+              : 'Added $n tunes to Playing Now.',
         );
       case 'rename':
         final n = await askName(
@@ -191,7 +191,7 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
       case 'saveAs':
         final n = await askName(
           context,
-          title: 'Save playlist as',
+          title: 'Save Playing Now as a playlist',
           initial: c.collections.uniqueName('My playlist'),
           confirm: 'Save',
         );
@@ -202,8 +202,8 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
         final n = c.addListToPlaylist(id);
         say(
           n == 0
-              ? 'Those tunes are already in the playlist.'
-              : 'Added $n tunes to the playlist.',
+              ? 'Those tunes are already in Playing Now.'
+              : 'Added $n tunes to Playing Now.',
         );
       case 'rename' || 'move' || 'delete':
         await _playlistAction(id, v);
@@ -528,7 +528,7 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
             itemBuilder: (_) => const [
               PopupMenuItem(
                 value: 'toPlaylist',
-                child: Text('Add all to Playlist'),
+                child: Text('Add all to Playing Now'),
               ),
               PopupMenuItem(value: 'rename', child: Text('Rename…')),
               PopupMenuItem(value: 'move', child: Text('Move to folder…')),
@@ -585,11 +585,11 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
         item('folder', 'Add folder…'),
         item('saveAs', 'Save as a new playlist…', enabled: has),
         const PopupMenuDivider(),
-        item('clear', 'Clear playlist', enabled: has),
+        item('clear', 'Clear Playing Now', enabled: has),
       ];
     }
     return [
-      item('toPlaylist', 'Add all to Playlist', enabled: has),
+      item('toPlaylist', 'Add all to Playing Now', enabled: has),
       if (id != favouritesId) ...[
         item('rename', 'Rename…'),
         item('move', 'Move to folder…'),
@@ -875,7 +875,7 @@ class _PlaylistRowState extends State<_PlaylistRow> {
   static final bool _touch = Platform.isAndroid || Platform.isIOS;
 
   String get _removeLabel => switch (widget.listId) {
-    mainListId => 'Remove from playlist',
+    mainListId => 'Remove from Playing Now',
     favouritesId => 'Remove from favourites',
     _ => 'Remove from this playlist',
   };

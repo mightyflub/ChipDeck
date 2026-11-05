@@ -103,6 +103,9 @@ and the version is given whenever a build is shared.
   "Choose a playlist…" (a dialog with folders and search, plus "New
   playlist here") and "New playlist…". Folders are stored as
   `playlistFolders` JSON; a playlist's folder is its `folder` field.
+  Stephen then asked for the main playlist to be called **"Playing Now"**
+  in the app (only the label; the code still calls it the main playlist,
+  `mainListId`, stored as `playlist`).
 - **Library refresh hardening (0.10.1, branch claude/project-thread-dq5ked):**
   Stephen added three music locations (Protracker, Fasttracker2, RealSID)
   while a refresh was running; two of them never got scanned and the app

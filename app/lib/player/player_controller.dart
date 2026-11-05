@@ -490,7 +490,7 @@ class PlayerController extends ChangeNotifier {
   // -------------------------------------------- favourites and playlists
   /// The name shown for a list id.
   String listName(String id) => switch (id) {
-    mainListId => 'Playlist',
+    mainListId => 'Playing Now',
     favouritesId => 'Favourites',
     _ => collections.byId(id)?.name ?? 'Playlist',
   };

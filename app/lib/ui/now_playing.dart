@@ -327,7 +327,7 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Pick a tune from your library or playlist.',
+            'Pick a tune from your library or a playlist.',
             style: TextStyle(color: Palette.textMuted),
           ),
         ],

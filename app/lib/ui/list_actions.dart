@@ -115,7 +115,8 @@ List<PopupMenuEntry<String>> listMenuItems(
     (p) => p.id != except && !recent.contains(p.id),
   );
   return [
-    if (except != mainListId) item(mainListId, Icons.queue_music, 'Playlist'),
+    if (except != mainListId)
+      item(mainListId, Icons.queue_music, 'Playing Now'),
     if (showFavourites && except != favouritesId)
       item(favouritesId, Icons.star_rounded, 'Favourites', color: Palette.star),
     for (final id in recent) item(id, Icons.playlist_play, c.listName(id)),
@@ -168,7 +169,7 @@ Future<void> addToListPicked(
   }
   final n = c.addToList(id, items);
   final name = c.listName(id);
-  final what = id == mainListId ? 'the playlist' : '"$name"';
+  final what = '"$name"';
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
