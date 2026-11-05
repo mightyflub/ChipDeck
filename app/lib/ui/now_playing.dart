@@ -1,8 +1,6 @@
 // Now playing: tune details, visualiser, progress, transport, subtunes.
 import 'package:flutter/material.dart';
 
-import '../debug_switches.dart';
-
 import '../native/chipdeck_ffi.dart';
 import '../platform/second_screen.dart';
 import '../player/player_controller.dart';
@@ -40,7 +38,7 @@ class NowPlaying extends StatelessWidget {
             }
             // Desktop windows: the scopes (or tune info) fill the height
             // between the title and the controls, nothing scrolls.
-            if (!compact && box.maxHeight >= 560 && !dbgNoDesktopNowPlaying) {
+            if (!compact && box.maxHeight >= 560) {
               return _Desktop(controller: c, info: info, remote: remote);
             }
             return SingleChildScrollView(

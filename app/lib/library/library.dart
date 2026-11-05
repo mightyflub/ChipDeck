@@ -288,12 +288,6 @@ class LibraryController extends ChangeNotifier {
   void Function(String path)? onStilFound;
   String? Function()? stilPath;
 
-  @visibleForTesting
-  LibraryController.forTest(File file) : _file = file;
-
-  @visibleForTesting
-  void notifyForTest() => notifyListeners();
-
   static Future<LibraryController> create() async {
     final dir = await getApplicationSupportDirectory();
     final c = LibraryController._(File(p.join(dir.path, 'library.json')));
