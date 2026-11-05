@@ -47,6 +47,11 @@ and the version is given whenever a build is shared.
   so every APK installs over the previous one.
 - Builds made by hand without `--dart-define=CHIPDECK_VERSION=...` show
   "dev".
+- 2026-11-05: Actions stopped starting jobs (every job failed in ~5 s with
+  no log, most likely the private repo's minutes). Stephen made the repo
+  public, which gives free Actions minutes. If Actions is ever blocked
+  again, build on Stephen's PC instead: see "Local builds on Stephen's PC"
+  under How to build and run.
 - CI runs on pull requests (test APKs come from these runs), on main and
   on v* tags. The Windows app (Stephen, 2026-11-04: not needed for every
   test build) builds only on main, tags, or a manual "Run workflow" with
@@ -380,6 +385,31 @@ volume, auto-advance modes (all subtunes then next, next tune, repeat),
 shuffle, settings (SID model, Songlengths.md5, STIL.txt, default length),
 STIL/BUGlist tune info for SID tunes (`lib/ui/tune_info.dart`).
 Keys: Space play/pause, Left/Right subtune, N/P tune, +/- volume.
+
+### Local builds on Stephen's PC (fallback when CI is unavailable)
+
+Checked 2026-11-05 through a Remote Control session. Already installed:
+git, Visual Studio Community 2026 with the C++ desktop workload, CMake,
+Ninja, Windows SDK 10.0.26100. Missing: Flutter, Java 17, Android SDK/NDK
+(only Java 25 is installed, and the Android build targets 17). Developer
+Mode is off; Flutter needs it for plugin symlinks, and only Stephen can
+switch it on (Settings > System > For developers).
+To set up (portable installs in a dev folder, no admin rights, PATH set
+only for the build shell):
+- Flutter 3.47.9 stable zip: https://docs.flutter.dev/install/archive
+- Temurin 17 (Android only): https://adoptium.net/temurin/releases/?version=17
+- Android command-line tools or Android Studio (Android only):
+  https://developer.android.com/studio, then `sdkmanager` for the
+  platform, build-tools and NDK versions in `app/android` (accept the
+  licences only with Stephen's OK).
+Not yet checked: whether Flutter 3.47.9 builds with VS 2026. If it
+doesn't, install the VS 2022 Build Tools.
+Build with the CI version scheme, by hand:
+`flutter build windows --release --dart-define=CHIPDECK_VERSION=<base>-test.local<N>`.
+For an APK that installs over CI builds, sign it with the release key.
+Stephen creates `app/android/key.properties` himself so passwords never
+pass through Claude. Use a build number above the last CI run
+(`--build-number`), or Android refuses the update as a downgrade.
 
 ### The Android app
 
