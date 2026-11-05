@@ -8,7 +8,3 @@ final dbgNoFilterButton = _on('CD_NOFILTER');
 final dbgNoDesktopNowPlaying = _on('CD_NODESKTOP');
 final dbgNoRescan = _on('CD_NORESCAN');
 final dbgNoSemantics = _on('CD_NOSEMANTICS');
-final dbgX1 = _on('CD_X1');
-final dbgX2 = _on('CD_X2');
-final dbgX3 = _on('CD_X3');
-final dbgX4 = _on('CD_X4');

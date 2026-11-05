@@ -41,20 +41,7 @@ class NowPlaying extends StatelessWidget {
             // Desktop windows: the scopes (or tune info) fill the height
             // between the title and the controls, nothing scrolls.
             if (!compact && box.maxHeight >= 560 && !dbgNoDesktopNowPlaying) {
-              Widget d = _Desktop(controller: c, info: info, remote: remote);
-              if (dbgX1) {
-                d = Semantics(
-                  container: true,
-                  explicitChildNodes: true,
-                  child: d,
-                );
-              }
-              if (dbgX2) {
-                d = SingleChildScrollView(
-                  child: SizedBox(height: box.maxHeight, child: d),
-                );
-              }
-              return d;
+              return _Desktop(controller: c, info: info, remote: remote);
             }
             return SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(pad, pad, pad, pad),
@@ -211,13 +198,6 @@ class _Desktop extends StatelessWidget {
                         ),
                         child: TuneInfoView(controller: c),
                       )
-                    : dbgX4
-                    ? Align(
-                        alignment: Alignment.topCenter,
-                        child: Visualizer(controller: c, height: 190),
-                      )
-                    : dbgX3
-                    ? ExcludeSemantics(child: Visualizer(controller: c))
                     : Visualizer(controller: c),
               ),
               const SizedBox(height: 20),
