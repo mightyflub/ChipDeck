@@ -77,7 +77,8 @@ and the version is given whenever a build is shared.
   The desktop Now playing is wrapped in its own `Semantics` container:
   without it, Flutter's Windows accessibility bridge crashed during a
   library scan (0.9.0-test.79; see NOTES.md). Keep it if you rework that
-  layout.
+  layout. Stephen confirmed 0.9.0-test.84 works on Windows (2026-11-05):
+  layout, filter, playback, full rescan. Not yet tried on the Ayn Thor.
 - **TFMX and TFMX-ST (0.8.0, branch claude/project-thread-ir84g9):**
   Amiga TFMX (v1.5, Pro, 7V; also Hippel TFMX and Future Composer, which
   come with the same library) is played by vendored libtfmxaudiodecoder
