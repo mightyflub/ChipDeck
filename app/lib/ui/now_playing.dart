@@ -584,7 +584,14 @@ class _Transport extends StatelessWidget {
           ],
         );
         final volume = _Volume(controller: c);
-        final advance = _AdvanceButton(controller: c);
+        // When a song ends, and random order: side by side.
+        final advance = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _AdvanceButton(controller: c),
+            _ShuffleButton(controller: c),
+          ],
+        );
         if (dense) {
           return Row(
             children: [
@@ -630,6 +637,27 @@ class _Transport extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Random order on/off for next, previous and auto-advance (S key).
+class _ShuffleButton extends StatelessWidget {
+  const _ShuffleButton({required this.controller});
+  final PlayerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final on = controller.shuffle;
+    return IconButton(
+      tooltip: on ? 'Random order: on (S)' : 'Random order: off (S)',
+      isSelected: on,
+      onPressed: controller.toggleShuffle,
+      icon: const Icon(Icons.shuffle, color: Palette.textMuted),
+      selectedIcon: const Icon(
+        Icons.shuffle_on_outlined,
+        color: Palette.accent,
+      ),
     );
   }
 }

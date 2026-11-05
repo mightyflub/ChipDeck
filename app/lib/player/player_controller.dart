@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../hvsc/stil.dart';
 import '../native/chipdeck_ffi.dart';
 import 'collections.dart';
+import 'shuffle.dart';
 
 export 'collections.dart'
     show
@@ -383,8 +384,12 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Random order for next/previous while [shuffle] is on.
+  final _order = ShuffleOrder();
+
   void toggleShuffle() {
     shuffle = !shuffle;
+    _order.reset();
     _prefs.setBool('shuffle', shuffle);
     notifyListeners();
   }
@@ -875,10 +880,14 @@ class PlayerController extends ChangeNotifier {
     final go = fromLibrary ? _playQueue : playIndex;
     if (length == 0) return;
     if (shuffle && length > 1) {
-      final now = DateTime.now().microsecondsSinceEpoch;
-      var n = now % length;
-      if (n == at) n = (n + 1) % length;
-      go(n);
+      // Every tune once in a random order, then stop (as at the end of
+      // the list in order).
+      final n = _order.next(fromLibrary ? _queue : playlist, length, at);
+      if (n == null) {
+        stop();
+      } else {
+        go(n);
+      }
       return;
     }
     final next = (at ?? -1) + 1;
@@ -893,6 +902,19 @@ class PlayerController extends ChangeNotifier {
     if (positionMs > 3000 && info != null) {
       selectSubtune(info!.currentSubtune); // restart
       return;
+    }
+    if (shuffle) {
+      // Back through the tunes played in random order.
+      final fromLibrary = _queueIndex != null;
+      final n = _order.previous(
+        fromLibrary ? _queue : playlist,
+        fromLibrary ? _queue.length : playlist.length,
+        fromLibrary ? _queueIndex : currentIndex,
+      );
+      if (n != null) {
+        fromLibrary ? _playQueue(n) : playIndex(n);
+        return;
+      }
     }
     if (_queueIndex != null) {
       if (_queueIndex! > 0) _playQueue(_queueIndex! - 1);

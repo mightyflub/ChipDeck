@@ -293,16 +293,6 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
                               count: entries.length,
                             ),
                           ),
-                        IconButton(
-                          tooltip: c.shuffle ? 'Shuffle on' : 'Shuffle off',
-                          isSelected: c.shuffle,
-                          icon: const Icon(Icons.shuffle),
-                          selectedIcon: const Icon(
-                            Icons.shuffle_on_outlined,
-                            color: Palette.accent,
-                          ),
-                          onPressed: c.toggleShuffle,
-                        ),
                         PopupMenuButton<String>(
                           tooltip: 'List actions',
                           icon: const Icon(Icons.more_vert),

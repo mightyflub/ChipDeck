@@ -106,6 +106,14 @@ and the version is given whenever a build is shared.
   Stephen then asked for the main playlist to be called **"Playing Now"**
   in the app (only the label; the code still calls it the main playlist,
   `mainListId`, stored as `playlist`).
+  **Random order (same PR):** Stephen asked for random playback in the
+  player controls. The shuffle button moved from the playlist header to the
+  transport (next to "when a song ends", every layout; S key; also on the
+  Android second-screen controls via a `shuffle` action/state field). It
+  now plays every tune of the list once in a random order, then stops like
+  the end of a list in order; "previous" steps back through the tunes
+  already played (`app/lib/player/shuffle.dart`, tested). Picking a tune by
+  hand or changing the list starts a fresh order.
 - **Library refresh hardening (0.10.1, branch claude/project-thread-dq5ked):**
   Stephen added three music locations (Protracker, Fasttracker2, RealSID)
   while a refresh was running; two of them never got scanned and the app

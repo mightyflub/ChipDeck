@@ -122,6 +122,8 @@ class _HomePageState extends State<HomePage> {
       c.previousTrack();
     } else if (k == LogicalKeyboardKey.keyF) {
       c.toggleFavourite();
+    } else if (k == LogicalKeyboardKey.keyS) {
+      c.toggleShuffle();
     } else if (k == LogicalKeyboardKey.equal ||
         k == LogicalKeyboardKey.numpadAdd) {
       c.setVolume((c.volume + 0.05).clamp(0, 1));

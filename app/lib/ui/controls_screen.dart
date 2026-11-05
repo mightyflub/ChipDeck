@@ -272,6 +272,14 @@ class _ControlsScreenState extends State<ControlsScreen> {
           onPressed: () => _send('advance', (a + 1) % _advanceIcons.length),
           icon: Icon(_advanceIcons[a], color: Palette.textMuted),
         ),
+        IconButton(
+          tooltip: s.shuffle ? 'Random order: on' : 'Random order: off',
+          onPressed: () => _send('shuffle'),
+          icon: Icon(
+            Icons.shuffle,
+            color: s.shuffle ? Palette.accent : Palette.textMuted,
+          ),
+        ),
         Expanded(
           child: Text(
             _advanceLabels[a],

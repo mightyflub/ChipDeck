@@ -25,6 +25,7 @@ class RemoteState {
     this.advance = 0,
     this.playlistIndex = 0,
     this.playlistLength = 0,
+    this.shuffle = false,
   });
 
   final bool hasTune;
@@ -44,6 +45,7 @@ class RemoteState {
   final int advance; // AdvanceMode index
   final int playlistIndex; // 1-based, 0 = none
   final int playlistLength;
+  final bool shuffle;
 
   static RemoteState of(PlayerController c) {
     final e = c.current;
@@ -66,6 +68,7 @@ class RemoteState {
       advance: c.advanceMode.index,
       playlistIndex: c.listPosition,
       playlistLength: c.listLength,
+      shuffle: c.shuffle,
     );
   }
 
@@ -87,6 +90,7 @@ class RemoteState {
     'advance': advance,
     'playlistIndex': playlistIndex,
     'playlistLength': playlistLength,
+    'shuffle': shuffle,
   };
 
   static RemoteState fromMap(Map<Object?, Object?> m) => RemoteState(
@@ -107,6 +111,7 @@ class RemoteState {
     advance: (m['advance'] as num?)?.toInt() ?? 0,
     playlistIndex: (m['playlistIndex'] as num?)?.toInt() ?? 0,
     playlistLength: (m['playlistLength'] as num?)?.toInt() ?? 0,
+    shuffle: m['shuffle'] as bool? ?? false,
   );
 }
 
@@ -119,6 +124,8 @@ void applyRemoteAction(PlayerController c, String action, Object? value) {
       c.nextTrack();
     case 'previous':
       c.previousTrack();
+    case 'shuffle':
+      c.toggleShuffle();
     case 'nextSubtune':
       c.nextSubtune();
     case 'previousSubtune':
