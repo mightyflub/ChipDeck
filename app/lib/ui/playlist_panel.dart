@@ -861,6 +861,16 @@ class _PlaylistRow extends StatefulWidget {
 class _PlaylistRowState extends State<_PlaylistRow> {
   bool _hover = false;
 
+  /// True while the row menu is open. Keeps the menu button in the tree
+  /// when the pointer leaves the row: a PopupMenuButton that is no longer
+  /// mounted drops the choice (0.11.0-test.102: "add to another playlist"
+  /// did nothing on Windows).
+  bool _menuOpen = false;
+
+  void _setMenuOpen(bool open) {
+    if (mounted && _menuOpen != open) setState(() => _menuOpen = open);
+  }
+
   /// Touch screens have no hover: the row menu is always shown.
   static final bool _touch = Platform.isAndroid || Platform.isIOS;
 
@@ -887,10 +897,18 @@ class _PlaylistRowState extends State<_PlaylistRow> {
     final c = widget.controller;
     final fav = c.isFavourite(widget.entry.path);
     return PopupMenuButton<String>(
+      // Keyed so it keeps its state while the hover tools around it come
+      // and go.
+      key: const ValueKey('rowMenu'),
       tooltip: 'More',
       icon: const Icon(Icons.more_vert, size: 18, color: Palette.textMuted),
       padding: EdgeInsets.zero,
-      onSelected: _menu,
+      onOpened: () => _setMenuOpen(true),
+      onCanceled: () => _setMenuOpen(false),
+      onSelected: (v) {
+        _setMenuOpen(false);
+        _menu(v);
+      },
       itemBuilder: (_) => [
         if (widget.listId != favouritesId)
           PopupMenuItem(
@@ -931,7 +949,7 @@ class _PlaylistRowState extends State<_PlaylistRow> {
     final dim = e.failed ? 0.45 : 1.0;
     final titleColor = widget.isCurrent ? Palette.accent : Colors.white;
     final fav = widget.listId != favouritesId && c.isFavourite(e.path);
-    final showTools = _hover || _touch;
+    final showTools = _hover || _touch || _menuOpen;
     final drag = widget.dragIndex;
     final title = Text(
       e.title,
