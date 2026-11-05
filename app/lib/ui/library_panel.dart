@@ -6,9 +6,11 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../library/library.dart';
+import '../native/chipdeck_ffi.dart' show TuneInfo;
 import '../platform/files.dart' as files;
 import '../player/player_controller.dart';
 import 'format_filter.dart';
+import 'list_actions.dart';
 import 'theme.dart';
 
 class LibraryPanel extends StatefulWidget {
@@ -107,32 +109,15 @@ class _LibraryPanelState extends State<LibraryPanel> {
     widget.onPlayed?.call();
   }
 
-  void _addTrack(LibraryTrack t) {
-    player.addKnown([(t.path, t.toInfo())]);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Added "${t.displayTitle}" to the playlist.'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  /// Plays the tunes straight from the library (the playlist is left
+  /// alone).
+  void _playAll(List<LibraryTrack> ts) {
+    if (ts.isNotEmpty) _playTrack(ts, 0);
   }
 
-  /// [replace]: play the tunes straight from the library (the playlist is
-  /// left alone); otherwise add them to the playlist.
-  void _playMany(List<LibraryTrack> ts, {required bool replace}) {
-    if (ts.isEmpty) return;
-    if (replace) {
-      _playTrack(ts, 0);
-      return;
-    }
-    player.addKnown([for (final t in ts) (t.path, t.toInfo())]);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Added ${ts.length} tunes to the playlist.'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
+  static List<(String, TuneInfo?)> _items(List<LibraryTrack> ts) => [
+    for (final t in ts) (t.path, t.toInfo()),
+  ];
 
   Future<void> _addLocation() async {
     final dir = await files.pickFolder(
@@ -269,19 +254,16 @@ class _LibraryPanelState extends State<LibraryPanel> {
             IconButton(
               tooltip: 'Play all matches',
               visualDensity: VisualDensity.compact,
-              onPressed: results.isEmpty
-                  ? null
-                  : () => _playMany(results, replace: true),
+              onPressed: results.isEmpty ? null : () => _playAll(results),
               icon: const Icon(Icons.play_arrow),
             ),
-            IconButton(
-              tooltip: 'Add all matches to playlist',
-              visualDensity: VisualDensity.compact,
-              onPressed: results.isEmpty
-                  ? null
-                  : () => _playMany(results, replace: false),
-              icon: const Icon(Icons.playlist_add, size: 20),
-            ),
+            if (results.isNotEmpty)
+              AddToListButton(
+                controller: player,
+                tooltip: 'Add all matches to a playlist',
+                showFavourites: true,
+                items: () => _items(results),
+              ),
           ] else ...[
             _RefreshButton(library: lib, compact: true),
             IconButton(
@@ -345,14 +327,15 @@ class _LibraryPanelState extends State<LibraryPanel> {
                 ),
                 const Spacer(),
                 TextButton.icon(
-                  onPressed: () => _playMany(r, replace: true),
+                  onPressed: () => _playAll(r),
                   icon: const Icon(Icons.play_arrow, size: 18),
                   label: const Text('Play all'),
                 ),
-                IconButton(
-                  tooltip: 'Add all to playlist',
-                  onPressed: () => _playMany(r, replace: false),
-                  icon: const Icon(Icons.playlist_add, size: 20),
+                AddToListButton(
+                  controller: player,
+                  tooltip: 'Add all to a playlist',
+                  showFavourites: true,
+                  items: () => _items(r),
                 ),
               ],
             ),
@@ -370,7 +353,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
                 dense: dense,
                 isCurrent: player.current?.path == r[i].path,
                 onPlay: () => _playTrack(r, i),
-                onAdd: () => _addTrack(r[i]),
+                player: player,
               ),
             ),
           ),
@@ -404,8 +387,14 @@ class _LibraryPanelState extends State<LibraryPanel> {
             dir: dir,
             onOpen: _open,
             onHome: () => setState(() => _dir = null),
-            onPlayAll: () => _playMany(lib.tracksUnder(dir), replace: true),
-            onAddAll: () => _playMany(lib.tracksUnder(dir), replace: false),
+            onPlayAll: () => _playAll(lib.tracksUnder(dir)),
+            addAll: AddToListButton(
+              controller: player,
+              tooltip:
+                  'Add all ${folder?.totalTracks ?? 0} tunes here to a playlist',
+              showFavourites: true,
+              items: () => _items(lib.tracksUnder(dir)),
+            ),
             total: folder?.totalTracks ?? 0,
           ),
         Expanded(
@@ -425,7 +414,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
                     isRoot: dir == null,
                     count: f?.totalTracks ?? 0,
                     onOpen: () => _open(c),
-                    onPlay: () => _playMany(lib.tracksUnder(c), replace: true),
+                    onPlay: () => _playAll(lib.tracksUnder(c)),
                   );
                 }
                 final t = lib.tracks[trackIdx[i - children.length]];
@@ -437,7 +426,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
                   onPlay: () => _playTrack([
                     for (final j in trackIdx) lib.tracks[j],
                   ], i - children.length),
-                  onAdd: () => _addTrack(t),
+                  player: player,
                 );
               },
             ),
@@ -492,7 +481,7 @@ class _Breadcrumb extends StatelessWidget {
     required this.onOpen,
     required this.onHome,
     required this.onPlayAll,
-    required this.onAddAll,
+    required this.addAll,
     required this.total,
   });
 
@@ -501,7 +490,7 @@ class _Breadcrumb extends StatelessWidget {
   final ValueChanged<String> onOpen;
   final VoidCallback onHome;
   final VoidCallback onPlayAll;
-  final VoidCallback onAddAll;
+  final Widget addAll;
   final int total;
 
   @override
@@ -592,14 +581,7 @@ class _Breadcrumb extends StatelessWidget {
               onPressed: total == 0 ? null : onPlayAll,
             ),
           ),
-          Tooltip(
-            message: 'Add all $total tunes here to the playlist',
-            child: IconButton(
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.playlist_add, size: 20),
-              onPressed: total == 0 ? null : onAddAll,
-            ),
-          ),
+          if (total > 0) addAll,
         ],
       ),
     );
@@ -699,7 +681,7 @@ class _TrackRow extends StatelessWidget {
     required this.showFolder,
     required this.isCurrent,
     required this.onPlay,
-    required this.onAdd,
+    required this.player,
     this.dense = false,
   });
 
@@ -713,7 +695,16 @@ class _TrackRow extends StatelessWidget {
   final bool dense;
   final bool isCurrent;
   final VoidCallback onPlay;
-  final VoidCallback onAdd;
+  final PlayerController player;
+
+  /// Star and add-to-playlist buttons at the end of the row.
+  List<Widget> _tools() => [
+    FavouriteButton(controller: player, path: track.path, info: track.toInfo()),
+    AddToListButton(
+      controller: player,
+      items: () => [(track.path, track.toInfo())],
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -800,16 +791,7 @@ class _TrackRow extends StatelessWidget {
                     ),
                   ),
                 ),
-              IconButton(
-                tooltip: 'Add to playlist',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(
-                  Icons.playlist_add,
-                  size: 20,
-                  color: Palette.textMuted,
-                ),
-                onPressed: onAdd,
-              ),
+              ..._tools(),
             ],
           ),
         ),
@@ -905,16 +887,7 @@ extension on _TrackRow {
                   style: num,
                 ),
               ),
-              IconButton(
-                tooltip: 'Add to playlist',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(
-                  Icons.playlist_add,
-                  size: 20,
-                  color: Palette.textMuted,
-                ),
-                onPressed: onAdd,
-              ),
+              ..._tools(),
             ],
           ),
         ),

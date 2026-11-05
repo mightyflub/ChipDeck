@@ -621,3 +621,43 @@ and the filter button made no difference. Fix: the Semantics container
 (cheapest, keeps the layout). Exact framework trigger not found; a
 widget-test check for semantics nodes changing parent saw none, so it
 is probably an engine bookkeeping bug that this tree shape avoids.
+
+## 2026-11-05: Favourites and user playlists (0.11.0)
+
+Stephen: "support for a favorites system and also the ability to create
+your own playlists. I'll be testing initially on the windows build".
+
+Decisions:
+- One panel, "Playlists", with a list picker in the header (main
+  Playlist, Favourites, named playlists, New playlist…) rather than more
+  tabs or columns: it fits every layout (three columns, side switch,
+  phone tabs, landscape rail) without changing them.
+- Favourites is just a special list (id `fav`), so starring, ordering and
+  playing use the same code as named playlists (`Collections`).
+- Playing from Favourites or a named playlist uses the library's queue
+  path (`playList` → `_queue` with `_queueSource`), so the main Playlist is
+  never changed by playing (Stephen's 0.10 rule) and its `currentIndex`
+  logic is untouched. Edits to the list being played re-sync the queue
+  (`_syncQueue`); if the playing tune is removed, the old order is kept
+  until the next play.
+- Stored as paths in SharedPreferences, like the main playlist. Details
+  come from the library index (path map built lazily in
+  `LibraryController.infoFor`, invalidated when `tracks` is replaced), else
+  each tune is probed once in the background (`_probed`).
+- Reordering uses `ReorderableListView.builder` with `onReorderItem`
+  (the old `onReorder` is deprecated in Flutter 3.47) and our own drag
+  handles: `ReorderableDragStartListener` on desktop,
+  `ReorderableDelayedDragStartListener` (long press) on Android. Off while
+  a search filter is active. The main Playlist keeps its plain list and
+  long-press-to-remove.
+- The library's add-to-playlist buttons became menus (one extra click for
+  the main Playlist) so the same button covers every list.
+- Panel wrapped in `Semantics(container: true, explicitChildNodes: true)`:
+  switching lists swaps the whole subtree, the kind of change that tripped
+  the Windows accessibility bridge in 0.9.0-test.79.
+
+Checked: `flutter analyze` clean, `flutter test` (17 tests, 8 new), Linux
+release build under Xvfb at 1600x900 and 960x540 with seeded preferences:
+picker menu, row menu, restore of the shown list and of the tune last
+played from Favourites. Screenshots: docs/screenshots/playlists-*.png.
+Not checked here: Windows (CI build only) and Android (CI APK).

@@ -11,6 +11,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../hvsc/stil.dart';
 import '../native/chipdeck_ffi.dart';
+import 'collections.dart';
+
+export 'collections.dart' show mainListId, favouritesId, UserPlaylist;
 
 /// File extensions the core can play.
 const supportedExtensions = {
@@ -108,6 +111,25 @@ class PlayerController extends ChangeNotifier {
   /// list instead. Only one of [currentIndex] and [_queueIndex] is set.
   List<PlaylistEntry> _queue = const [];
   int? _queueIndex;
+
+  /// Where [_queue] came from: null for the library, else the id of a
+  /// collection (favourites or one of the user's playlists).
+  String? _queueSource;
+
+  /// Favourites and the user's own playlists.
+  final collections = Collections();
+
+  /// Which list the playlist panel shows: [mainListId], [favouritesId] or
+  /// a user playlist id.
+  String shownList = mainListId;
+
+  /// Looks up a tune's details in the library index (set in main.dart),
+  /// so favourites and playlists show titles without probing the files.
+  TuneInfo? Function(String path)? lookupInfo;
+
+  /// Entries for collection tunes, by path, so details are probed once.
+  final Map<String, PlaylistEntry> _entries = {};
+  final Set<String> _probed = {};
   TuneInfo? info;
   bool playing = false;
   int positionMs = 0;
@@ -156,7 +178,16 @@ class PlayerController extends ChangeNotifier {
       : (_queueIndex != null ? _queue[_queueIndex!] : null);
 
   /// True while playing tunes from the library rather than the playlist.
-  bool get playingFromLibrary => _queueIndex != null;
+  bool get playingFromLibrary => _queueIndex != null && _queueSource == null;
+
+  /// The list the current tune is played from: [mainListId], a collection
+  /// id, or null for the library (or nothing playing).
+  String? get playingList => currentIndex != null
+      ? mainListId
+      : (_queueIndex != null ? _queueSource : null);
+
+  /// Whether next/previous have a list to step through.
+  bool get canSkip => listLength > 0;
 
   /// Position (1-based, 0 = none) and length of the list being played:
   /// the playlist, or the library list a tune was started from.
@@ -199,15 +230,34 @@ class PlayerController extends ChangeNotifier {
       stilPath = _stilBeside(songlengthsPath!);
     }
     if (stilPath != null) _loadStil(stilPath!);
+    collections.load(
+      favourites: _prefs.getStringList('favourites'),
+      playlists: _prefs.getString('userPlaylists'),
+    );
+    final shown = _prefs.getString('shownList') ?? mainListId;
+    shownList = shown == mainListId || collections.pathsOf(shown) != null
+        ? shown
+        : mainListId;
     final saved = _prefs.getStringList('playlist') ?? const [];
     addFiles(saved.where((f) => File(f).existsSync()).toList(), persist: false);
     final lastTune = _prefs.getString('lastTune');
     final last = _prefs.getInt('lastIndex');
     if (lastTune != null && File(lastTune).existsSync()) {
-      // Last tune came from the library: bring it back without adding it
-      // to the playlist.
-      _queue = [PlaylistEntry(lastTune)];
-      _queueIndex = 0;
+      // Last tune came from the library or a collection: bring it back
+      // without adding it to the playlist. From a collection, next and
+      // previous carry on through it.
+      final source = _prefs.getString('lastSource');
+      final at = source == null
+          ? -1
+          : (collections.pathsOf(source)?.indexOf(lastTune) ?? -1);
+      if (at >= 0) {
+        _queue = collectionEntries(source!, probe: false);
+        _queueIndex = at;
+        _queueSource = source;
+      } else {
+        _queue = [PlaylistEntry(lastTune)];
+        _queueIndex = 0;
+      }
       _loadCurrent(autoplay: false);
     } else if (last != null && last >= 0 && last < playlist.length) {
       currentIndex = last;
@@ -416,6 +466,186 @@ class PlayerController extends ChangeNotifier {
   void _clearQueue() {
     _queue = const [];
     _queueIndex = null;
+    _queueSource = null;
+  }
+
+  // -------------------------------------------- favourites and playlists
+  /// The name shown for a list id.
+  String listName(String id) => switch (id) {
+    mainListId => 'Playlist',
+    favouritesId => 'Favourites',
+    _ => collections.byId(id)?.name ?? 'Playlist',
+  };
+
+  void showList(String id) {
+    if (id != mainListId && collections.pathsOf(id) == null) id = mainListId;
+    if (shownList == id) return;
+    shownList = id;
+    _prefs.setString('shownList', id);
+    notifyListeners();
+  }
+
+  /// Entries (with details where known) for a collection's tunes. Tunes
+  /// whose details are unknown are probed in the background.
+  List<PlaylistEntry> collectionEntries(String id, {bool probe = true}) {
+    final paths = collections.pathsOf(id) ?? const <String>[];
+    final out = [
+      for (final f in paths)
+        _entries.putIfAbsent(
+          f,
+          () => PlaylistEntry(f)..info = lookupInfo?.call(f),
+        ),
+    ];
+    if (probe) {
+      // Each tune is probed at most once (_probed), even if it fails.
+      final unknown = [
+        for (final e in out)
+          if (e.info == null && _probed.add(e.path)) e,
+      ];
+      if (unknown.isNotEmpty) _probe(unknown);
+    }
+    return out;
+  }
+
+  /// Remembers known details for tunes going into a collection.
+  void _seed(Iterable<(String, TuneInfo?)> items) {
+    for (final (path, info) in items) {
+      final e = _entries.putIfAbsent(path, () => PlaylistEntry(path));
+      e.info ??= info;
+    }
+  }
+
+  /// Keeps next/previous in step after the collection being played from
+  /// changes. If the playing tune was taken out, the old order is kept.
+  void _syncQueue(String id) {
+    final at = _queueIndex;
+    if (_queueSource != id || at == null) return;
+    final path = _queue[at].path;
+    final entries = collectionEntries(id, probe: false);
+    final now = entries.indexWhere((e) => e.path == path);
+    if (now < 0) return;
+    _queue = entries;
+    _queueIndex = now;
+  }
+
+  void _saveCollections() {
+    _prefs.setStringList('favourites', collections.favouritesToPrefs());
+    _prefs.setString('userPlaylists', collections.playlistsToPrefs());
+  }
+
+  bool isFavourite(String path) => collections.isFavourite(path);
+
+  /// Stars or unstars a tune ([path], or the current tune). Returns the new
+  /// state.
+  bool toggleFavourite([String? path, TuneInfo? info]) {
+    final e = current;
+    path ??= e?.path;
+    if (path == null) return false;
+    _seed([(path, info ?? (path == e?.path ? e?.info : null))]);
+    final on = collections.toggleFavourite(path);
+    _syncQueue(favouritesId);
+    _saveCollections();
+    notifyListeners();
+    return on;
+  }
+
+  /// Adds tunes to a list: the main playlist, favourites or a user
+  /// playlist. Returns how many were new to it.
+  int addToList(String id, List<(String, TuneInfo?)> items) {
+    if (id == mainListId) {
+      final before = playlist.length;
+      final known = [
+        for (final (path, info) in items)
+          if (info != null) (path, info),
+      ];
+      if (known.length == items.length) {
+        addKnown(known);
+      } else {
+        addFiles([for (final (path, _) in items) path]);
+      }
+      return playlist.length - before;
+    }
+    _seed(items);
+    final n = collections.addTo(id, [for (final (path, _) in items) path]);
+    _syncQueue(id);
+    _saveCollections();
+    notifyListeners();
+    return n;
+  }
+
+  /// Makes a new playlist (optionally with tunes) and returns its id.
+  String createPlaylist(
+    String name, [
+    List<(String, TuneInfo?)> items = const [],
+  ]) {
+    _seed(items);
+    final pl = collections.create(
+      name,
+      paths: [for (final (path, _) in items) path],
+    );
+    _saveCollections();
+    notifyListeners();
+    return pl.id;
+  }
+
+  /// Saves the main playlist as a new named playlist.
+  String savePlaylistAs(String name) =>
+      createPlaylist(name, [for (final e in playlist) (e.path, e.info)]);
+
+  void renamePlaylist(String id, String name) {
+    if (collections.rename(id, name)) {
+      _saveCollections();
+      notifyListeners();
+    }
+  }
+
+  void deletePlaylist(String id) {
+    if (!collections.delete(id)) return;
+    if (shownList == id) showList(mainListId);
+    if (_queueSource == id) _queueSource = null; // keeps playing its copy
+    _saveCollections();
+    notifyListeners();
+  }
+
+  void removeFromList(String id, int index) {
+    if (id == mainListId) return removeAt(index);
+    if (collections.removeAt(id, index)) {
+      _syncQueue(id);
+      _saveCollections();
+      notifyListeners();
+    }
+  }
+
+  void moveInList(String id, int oldIndex, int newIndex) {
+    if (collections.move(id, oldIndex, newIndex)) {
+      _syncQueue(id);
+      _saveCollections();
+      notifyListeners();
+    }
+  }
+
+  void clearList(String id) {
+    if (id == mainListId) return clearPlaylist();
+    collections.clear(id);
+    _saveCollections();
+    notifyListeners();
+  }
+
+  /// Adds every tune of a collection to the main playlist.
+  int addListToPlaylist(String id) => addToList(mainListId, [
+    for (final e in collectionEntries(id, probe: false)) (e.path, e.info),
+  ]);
+
+  /// Plays a collection from [index] without touching the main playlist;
+  /// next and previous step through the collection.
+  void playList(String id, int index) {
+    if (id == mainListId) return playIndex(index);
+    final entries = collectionEntries(id);
+    if (index < 0 || index >= entries.length) return;
+    _queue = entries;
+    _queueSource = id;
+    currentIndex = null;
+    _playQueue(index);
   }
 
   // Probe metadata in a background isolate, in batches, so the UI stays smooth.
@@ -457,6 +687,7 @@ class PlayerController extends ChangeNotifier {
       for (final (path, tuneInfo) in items)
         PlaylistEntry(path)..info = tuneInfo,
     ];
+    _queueSource = null;
     currentIndex = null;
     _playQueue(start.clamp(0, _queue.length - 1));
   }
@@ -464,6 +695,11 @@ class PlayerController extends ChangeNotifier {
   void _playQueue(int index) {
     _queueIndex = index;
     _prefs.setString('lastTune', _queue[index].path);
+    if (_queueSource != null) {
+      _prefs.setString('lastSource', _queueSource!);
+    } else {
+      _prefs.remove('lastSource');
+    }
     _loadCurrent(autoplay: true);
   }
 

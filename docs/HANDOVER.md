@@ -30,6 +30,8 @@ only inside `lib/platform/`.
   with a second window; not planned unless asked.
 - Windows only: keyboard shortcuts (harmless on Android; work with a
   Bluetooth keyboard).
+- Android second-screen controls (0.11.0): no favourite star there yet;
+  star the tune on the main screen.
 
 ## Version numbers and CI builds
 
@@ -50,8 +52,38 @@ and the version is given whenever a build is shared.
   test build) builds only on main, tags, or a manual "Run workflow" with
   "windows" ticked. Pushes to other branches without a PR build nothing.
 
-## Current state (2026-11-04)
+## Current state (2026-11-05)
 
+- **Favourites and your own playlists (0.11.0, branch claude/project-thread-v2ksvd):**
+  Stephen asked (2026-11-05) for favourites and user-made playlists, testing
+  on Windows first. The Playlist panel is now "Playlists": a picker in its
+  header switches between the main **Playlist** (unchanged behaviour),
+  **Favourites**, and any number of named playlists, plus "New playlist…".
+  Star a tune from Now playing (next to the title, or press **F**), a
+  library row, or a playlist row. The add-to-playlist button (library rows,
+  Now playing, "add all" for folders and search results) is now a menu:
+  Playlist, your playlists (Favourites too for "add all"), New playlist….
+  Playlist rows have a menu (star, remove, add to another list); on
+  desktop they also show star/remove on hover. Favourites and named
+  playlists can be reordered (drag handle on Windows, long press and drag
+  on Android; not while searching), renamed, emptied, deleted, and copied
+  into the main Playlist ("Add all to Playlist"). The main Playlist can be
+  saved as a named playlist. Playing from Favourites or a named playlist
+  works like the library: it does **not** touch the main Playlist, and
+  next/previous/auto-advance/shuffle step through that list (kept in step
+  if it is edited while playing; remembered across restarts). Stored in
+  SharedPreferences (`favourites`, `userPlaylists` JSON, `shownList`,
+  `lastSource`), paths only; titles come from the library index
+  (`LibraryController.infoFor`) or a one-off background probe. Model and
+  list operations: `app/lib/player/collections.dart` (unit tested in
+  `app/test/collections_test.dart`); controller methods in
+  `player_controller.dart` ("favourites and playlists"); shared UI
+  (star button, add-to menu, name/confirm dialogs) in
+  `app/lib/ui/list_actions.dart`. The panel is wrapped in its own
+  `Semantics(container: true)` like the desktop Now playing (Windows
+  accessibility crash, see NOTES.md). Same code on Windows and Android.
+  Also fixed: next/previous were disabled when playing from the library
+  with an empty playlist.
 - **Playlist and library refresh (0.10.0, branch claude/project-thread-x9dijm):**
   playing a tune from the Library no longer adds it to the playlist. Tap a
   tune, "Play all" or a folder's play button: it plays straight from the
@@ -450,6 +482,13 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
+0000. Favourites and playlists (0.11.0): Stephen tries the Windows build:
+   star tunes (library, Now playing, F key), make/rename/delete playlists,
+   add from library rows and folders, reorder by dragging, play from a list
+   (main Playlist unchanged; next/previous walk that list), restart (lists,
+   shown list and position come back). Then the APK on the Ayn Thor.
+   Possible follow-ups: star on the second-screen controls, import/export
+   playlists as .m3u, a "starred" mark or filter in the library.
 000. Playlist/library refresh (0.10.0): Stephen tries the Windows build:
    play from the library (playlist must stay unchanged, next/previous walk
    the folder or results), restart (no scan), refresh one location and all.

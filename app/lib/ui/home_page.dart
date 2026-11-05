@@ -1,4 +1,4 @@
-// Main window: playlist + now playing, adapting to narrow (phone) widths.
+// Main window: library, now playing and playlists, adapting to narrow (phone) widths.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -106,6 +106,8 @@ class _HomePageState extends State<HomePage> {
       c.nextTrack();
     } else if (k == LogicalKeyboardKey.keyP || k == LogicalKeyboardKey.pageUp) {
       c.previousTrack();
+    } else if (k == LogicalKeyboardKey.keyF) {
+      c.toggleFavourite();
     } else if (k == LogicalKeyboardKey.equal ||
         k == LogicalKeyboardKey.numpadAdd) {
       c.setVolume((c.volume + 0.05).clamp(0, 1));
@@ -187,7 +189,6 @@ class _HomePageState extends State<HomePage> {
                         onChanged: (i) => setState(() => _side = i),
                         library: library,
                         playlist: playlist,
-                        playlistCount: c.playlist.length,
                       ),
                     ),
                     const VerticalDivider(width: 1),
@@ -230,7 +231,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.queue_music),
-                  label: 'Playlist',
+                  label: 'Playlists',
                 ),
               ],
             ),
@@ -290,7 +291,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     IconButton(
                       tooltip: 'Next tune',
-                      onPressed: c.playlist.isEmpty ? null : c.nextTrack,
+                      onPressed: c.canSkip ? c.nextTrack : null,
                       icon: const Icon(Icons.skip_next_rounded),
                     ),
                   ],
@@ -340,7 +341,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 NavigationRailDestination(
                   icon: Icon(Icons.queue_music),
-                  label: Text('Playlist'),
+                  label: Text('Playlists'),
                 ),
               ],
             ),
@@ -406,14 +407,12 @@ class _SidePanel extends StatelessWidget {
     required this.onChanged,
     required this.library,
     required this.playlist,
-    required this.playlistCount,
   });
 
   final int index;
   final ValueChanged<int> onChanged;
   final Widget library;
   final Widget playlist;
-  final int playlistCount;
 
   @override
   Widget build(BuildContext context) {
@@ -436,11 +435,7 @@ class _SidePanel extends StatelessWidget {
                   ButtonSegment(
                     value: 1,
                     icon: const Icon(Icons.queue_music, size: 18),
-                    label: Text(
-                      playlistCount == 0
-                          ? 'Playlist'
-                          : 'Playlist ($playlistCount)',
-                    ),
+                    label: const Text('Playlists'),
                   ),
                 ],
                 selected: {index},
