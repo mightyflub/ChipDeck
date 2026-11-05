@@ -98,8 +98,12 @@ class _LibraryPanelState extends State<LibraryPanel> {
     if (_scroll.hasClients) _scroll.jumpTo(0);
   }
 
-  void _playTrack(LibraryTrack t) {
-    player.addKnown([(t.path, t.toInfo())], play: true);
+  /// Plays [list][index] without adding anything to the playlist; next and
+  /// previous carry on through [list] (the folder or the search results).
+  void _playTrack(List<LibraryTrack> list, int index) {
+    player.playFromLibrary([
+      for (final t in list) (t.path, t.toInfo()),
+    ], start: index);
     widget.onPlayed?.call();
   }
 
@@ -113,23 +117,21 @@ class _LibraryPanelState extends State<LibraryPanel> {
     );
   }
 
+  /// [replace]: play the tunes straight from the library (the playlist is
+  /// left alone); otherwise add them to the playlist.
   void _playMany(List<LibraryTrack> ts, {required bool replace}) {
     if (ts.isEmpty) return;
-    player.addKnown(
-      [for (final t in ts) (t.path, t.toInfo())],
-      replace: replace,
-      play: replace,
-    );
-    if (!replace) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Added ${ts.length} tunes to the playlist.'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } else {
-      widget.onPlayed?.call();
+    if (replace) {
+      _playTrack(ts, 0);
+      return;
     }
+    player.addKnown([for (final t in ts) (t.path, t.toInfo())]);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Added ${ts.length} tunes to the playlist.'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _addLocation() async {
@@ -194,13 +196,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
             ),
           ),
           const Spacer(),
-          IconButton(
-            tooltip: 'Rescan library',
-            onPressed: lib.isScanning || lib.roots.isEmpty
-                ? null
-                : () => lib.rescan(),
-            icon: const Icon(Icons.refresh),
-          ),
+          _RefreshButton(library: lib),
           IconButton(
             tooltip: 'Music locations',
             onPressed: () => showDialog<void>(
@@ -287,12 +283,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
               icon: const Icon(Icons.playlist_add, size: 20),
             ),
           ] else ...[
-            IconButton(
-              tooltip: 'Rescan library',
-              visualDensity: VisualDensity.compact,
-              onPressed: lib.isScanning ? null : () => lib.rescan(),
-              icon: const Icon(Icons.refresh, size: 20),
-            ),
+            _RefreshButton(library: lib, compact: true),
             IconButton(
               tooltip: 'Music locations',
               visualDensity: VisualDensity.compact,
@@ -378,7 +369,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
                 showFolder: true,
                 dense: dense,
                 isCurrent: player.current?.path == r[i].path,
-                onPlay: () => _playTrack(r[i]),
+                onPlay: () => _playTrack(r, i),
                 onAdd: () => _addTrack(r[i]),
               ),
             ),
@@ -443,7 +434,9 @@ class _LibraryPanelState extends State<LibraryPanel> {
                   showFolder: false,
                   dense: dense,
                   isCurrent: player.current?.path == t.path,
-                  onPlay: () => _playTrack(t),
+                  onPlay: () => _playTrack([
+                    for (final j in trackIdx) lib.tracks[j],
+                  ], i - children.length),
                   onAdd: () => _addTrack(t),
                 );
               },
@@ -1025,19 +1018,34 @@ class _LocationsDialog extends StatelessWidget {
                   ),
                   title: Text(r, maxLines: 2, overflow: TextOverflow.ellipsis),
                   subtitle: Text(
-                    '${library.folder(r)?.totalTracks ?? 0} tunes',
+                    library.scanningRoots.contains(r)
+                        ? 'Refreshing…'
+                        : '${library.folder(r)?.totalTracks ?? 0} tunes'
+                              '${library.rootScans[r] == null ? '' : ' · refreshed ${_fmt(library.rootScans[r]!)}'}',
                     style: const TextStyle(color: Palette.textMuted),
                   ),
-                  trailing: IconButton(
-                    tooltip: 'Remove from library (files are not deleted)',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => library.removeRoot(r),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Refresh this location',
+                        icon: const Icon(Icons.refresh),
+                        onPressed: library.isScanning
+                            ? null
+                            : () => library.rescan(only: [r]),
+                      ),
+                      IconButton(
+                        tooltip: 'Remove from library (files are not deleted)',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => library.removeRoot(r),
+                      ),
+                    ],
                   ),
                 ),
               const SizedBox(height: 8),
               if (library.lastScan != null)
                 Text(
-                  'Last scan: ${_fmt(library.lastScan!)}',
+                  'Last refresh: ${_fmt(library.lastScan!)}',
                   style: const TextStyle(
                     color: Palette.textMuted,
                     fontSize: 12,
@@ -1052,6 +1060,12 @@ class _LocationsDialog extends StatelessWidget {
                 ? null
                 : () => library.rescan(full: true),
             child: const Text('Rebuild index'),
+          ),
+          TextButton(
+            onPressed: library.isScanning || library.roots.isEmpty
+                ? null
+                : () => library.rescan(),
+            child: const Text('Refresh all'),
           ),
           OutlinedButton.icon(
             onPressed: () => onAdd(),
@@ -1070,4 +1084,68 @@ class _LocationsDialog extends StatelessWidget {
   static String _fmt(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} '
       '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+}
+
+/// Refresh menu: every location at once, or one of them. With a single
+/// location it is a plain button.
+class _RefreshButton extends StatelessWidget {
+  const _RefreshButton({required this.library, this.compact = false});
+  final LibraryController library;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = Icon(Icons.refresh, size: compact ? 20 : null);
+    final density = compact ? VisualDensity.compact : null;
+    final disabled = library.isScanning || library.roots.isEmpty;
+    if (library.roots.length < 2) {
+      return IconButton(
+        tooltip: 'Refresh library',
+        visualDensity: density,
+        onPressed: disabled ? null : () => library.rescan(),
+        icon: icon,
+      );
+    }
+    return PopupMenuButton<String>(
+      tooltip: 'Refresh library',
+      enabled: !disabled,
+      icon: icon,
+      style: density == null
+          ? null
+          : IconButton.styleFrom(visualDensity: density),
+      // '' means every location (a null value would count as cancelled).
+      onSelected: (r) => library.rescan(only: r.isEmpty ? null : [r]),
+      itemBuilder: (context) => [
+        const PopupMenuItem<String>(
+          value: '',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.refresh),
+            title: Text('Refresh all locations'),
+          ),
+        ),
+        const PopupMenuDivider(),
+        for (final r in library.roots)
+          PopupMenuItem<String>(
+            value: r,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.storage_rounded),
+              title: Text(
+                p.basename(r).isEmpty ? r : p.basename(r),
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                r,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }

@@ -533,6 +533,33 @@ Integration:
 
 Not tested: real TFMX or TFMX-ST files (Modland is blocked in the cloud).
 
+## 2026-11-04: Playing from the library, refresh per location (0.10.0)
+
+Stephen: "Don't add every file the user plays to the playlist. Don't
+automatically refresh the library on startup. Add options to refresh each
+library individually or all at once."
+
+- "Each library" read as each music location (library root); the app has
+  no other kind of library.
+- `PlayerController.playFromLibrary(items, start:)` plays a list that is
+  not the playlist (`_queue`/`_queueIndex`; `currentIndex` stays null).
+  `current`, next/previous, shuffle and auto-advance work on whichever list
+  is active. `listPosition`/`listLength` feed the second-screen "n / m".
+  The last library tune is remembered as pref `lastTune` and restored
+  (paused) at startup instead of `lastIndex`.
+- Library panel: tapping a tune passes the whole folder (or results) with
+  its index; "Play all" / folder play do the same from the first tune.
+  Clear playlist no longer stops a tune playing from the library.
+- `main.dart` no longer calls `library.rescan()`. A new Songlengths file
+  still triggers a full rescan (the user asked for it by picking the file).
+- `rescan(only:)` scans just those roots, sends the worker only their
+  known entries, and merges the result with the untouched tracks.
+- UI: `_RefreshButton` (popup menu; `''` = all, since a null menu value
+  counts as cancel), per-location refresh in Music locations + "Refresh all",
+  per-location "refreshed" time. Kept small: another thread is redoing the
+  layout and filters (0.9.0).
+- Checked with `flutter analyze` (clean) and `dart format`; not run on a
+  device yet.
 ## 2026-11-04: Format filter and desktop layout (0.9.0)
 
 Stephen: "we need a better way of choosing the platform filters. As we add

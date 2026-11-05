@@ -52,6 +52,18 @@ and the version is given whenever a build is shared.
 
 ## Current state (2026-11-04)
 
+- **Playlist and library refresh (0.10.0, branch claude/project-thread-x9dijm):**
+  playing a tune from the Library no longer adds it to the playlist. Tap a
+  tune, "Play all" or a folder's play button: it plays straight from the
+  library, and next/previous/auto-advance/shuffle step through the list it
+  came from (the folder's tunes or the search results). Only the explicit
+  "add to playlist" buttons and Add files/folder change the playlist. The
+  library is no longer refreshed at startup. The refresh button is a menu
+  (refresh all locations, or one of them; a plain button with one location),
+  and Music locations has a refresh button per location, its last refresh
+  time, and "Refresh all". Adding a location reads only that location.
+  Same code on Windows and Android (all Dart). Version 0.10.0 because a
+  parallel thread (Windows layout and format filters) takes 0.9.0.
 - **Format filter and desktop layout (0.9.0, branch claude/project-thread-zton23):**
   Stephen asked for a filter that scales as formats are added, and for a
   Windows layout that uses the space. The library's row of filter chips
@@ -286,8 +298,12 @@ repo root CMakeLists, so the native library is built automatically.
 Library (added 2026-11-04 at Stephen's request): saved music locations
 (e.g. HVSC C64Music, the SNDH archive), indexed in the background into
 `library.json` in the app support folder (Windows: %APPDATA%\io.github.mightyflub\chipdeck).
-Rescans are incremental (size + mtime), run on startup and via the refresh
-button; "Rebuild index" in Music locations re-reads everything. Folder
+Refreshes are incremental (size + mtime) and never automatic at startup
+(since 0.10.0): the refresh menu refreshes all locations or one, as do the
+per-location buttons in Music locations; adding a location reads only that
+one; "Rebuild index" in Music locations re-reads everything.
+`LibraryController.rescan(only: [...])` keeps tunes in other locations
+untouched; per-location times are saved as `rootScans` in library.json. Folder
 browser with breadcrumbs and per-folder tune counts, play/add a whole
 folder, instant search (all words must match title, composer, released or
 folder) with a C64/Atari filter. If a location contains
@@ -434,6 +450,9 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
+000. Playlist/library refresh (0.10.0): Stephen tries the Windows build:
+   play from the library (playlist must stay unchanged, next/previous walk
+   the folder or results), restart (no scan), refresh one location and all.
 00. TFMX / TFMX-ST (0.8.0): Stephen tries real files on Windows: Amiga
    TFMX (e.g. Turrican 2, a 7V tune), and TFMX-ST pairs from Modland's
    "TFMX ST" folder (mdat.* + smpl.*). Listen especially for TFMX-ST digi
