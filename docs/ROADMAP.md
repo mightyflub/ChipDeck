@@ -3,7 +3,9 @@
 Written 2026-11-05. The owner asked for all nine ideas below, split into
 small releases that are each easy to test. Nothing here is built yet.
 
-Each release is one version bump and one PR. It is tested on Windows first
+Each release is one version bump and one PR. The owner asked
+(2026-11-05) for the first three features in one build (0.12.0) and the
+next three in another (0.13.0); the rest are one release each. It is tested on Windows first
 (the main test platform), then on the Android test handheld. As always,
 every feature lands on both platforms in the same release, or is listed in
 HANDOVER.md under "Pending on one platform". Every release also updates
@@ -42,20 +44,16 @@ Some of the ideas are partly done, so their releases are smaller:
 
 | Version | What | Size | Mostly |
 | --- | --- | --- | --- |
-| 0.12.0 | Mute and solo voices | S | core + Now playing |
-| 0.13.0 | Seeking and a scrub bar | M | core + Now playing |
-| 0.14.0 | C64 ROM setting | S | Settings |
-| 0.15.0 | Play history, play counts, "Most played" | S | Dart only |
-| 0.16.0 | Windows media keys, Android audio focus and lock-screen seeking | M | platform code |
-| 0.17.0 | More module formats from libxmp (S3M, IT, MED...), Future Composer check | S | app format list |
-| 0.18.0 | HVSC download and update in the app | L | new downloads code |
-| 0.19.0 | SNDH archive download and update | M | reuses 0.18.0 |
-| 0.20.0 | Modland browsing and downloads | L | reuses 0.18.0 |
-| 0.21.0 | Sound options: SID filter, Amiga stereo separation, gap between tunes | M | core + Settings |
-| 0.22.0 | Crossfade between tunes | M | audio engine |
-| 0.23.0 | Export to WAV and FLAC | M | core + new dialog |
-| 0.24.0 | AHX and HivelyTracker | M | new engine |
-| 0.25.0 | SAP (Atari 8-bit) | M | new engine |
+| 0.12.0 | Mute and solo voices, seeking and a scrub bar, C64 ROM setting | M | core + Now playing + Settings |
+| 0.13.0 | Play history and "Most played", Windows media keys and Android audio focus, more module formats (S3M, IT, MED...) | M | Dart, platform code, format list |
+| 0.14.0 | HVSC download and update in the app | L | new downloads code |
+| 0.15.0 | SNDH archive download and update | M | reuses 0.14.0 |
+| 0.16.0 | Modland browsing and downloads | L | reuses 0.14.0 |
+| 0.17.0 | Sound options: SID filter, Amiga stereo separation, gap between tunes | M | core + Settings |
+| 0.18.0 | Crossfade between tunes | M | audio engine |
+| 0.19.0 | Export to WAV and FLAC | M | core + new dialog |
+| 0.20.0 | AHX and HivelyTracker | M | new engine |
+| 0.21.0 | SAP (Atari 8-bit) | M | new engine |
 
 S = a day or less of work, M = a few days, L = about a week.
 
@@ -65,13 +63,13 @@ ChipDeck is GPL-2.0-or-later, so anything added must be GPL-2-compatible.
 
 | Release | Library | Licence | Notes |
 | --- | --- | --- | --- |
-| 0.16.0 | Windows SystemMediaTransportControls (C++/WinRT, part of the Windows SDK) | Windows SDK | Written in the Windows runner; no extra package. A pub package such as `smtc_windows` would pull in a Rust toolchain, so avoid it. |
-| 0.18.0-0.20.0 | `archive` (Dart) | MIT | Unzips downloads. |
-| 0.18.0 | LZMA SDK (only if HVSC needs 7z) | Public domain | Only if no zip of HVSC is available; to be checked. |
-| 0.18.0-0.20.0 | `dart:io` HttpClient | (Dart SDK) | No extra package needed for downloads. |
-| 0.23.0 | libFLAC | BSD-3-Clause | FLAC encoding. WAV needs nothing (the CLI already writes WAV). |
-| 0.24.0 | HivelyTracker replayer (hvl_replay) | BSD-3-Clause | Plays .hvl and .ahx. |
-| 0.25.0 | ASAP | GPL-2.0-or-later | Plays .sap (and .cmc, .rmt, .tmc and others). |
+| 0.13.0 | Windows SystemMediaTransportControls (C++/WinRT, part of the Windows SDK) | Windows SDK | Written in the Windows runner; no extra package. A pub package such as `smtc_windows` would pull in a Rust toolchain, so avoid it. |
+| 0.14.0-0.16.0 | `archive` (Dart) | MIT | Unzips downloads. |
+| 0.14.0 | LZMA SDK (only if HVSC needs 7z) | Public domain | Only if no zip of HVSC is available; to be checked. |
+| 0.14.0-0.16.0 | `dart:io` HttpClient | (Dart SDK) | No extra package needed for downloads. |
+| 0.19.0 | libFLAC | BSD-3-Clause | FLAC encoding. WAV needs nothing (the CLI already writes WAV). |
+| 0.20.0 | HivelyTracker replayer (hvl_replay) | BSD-3-Clause | Plays .hvl and .ahx. |
+| 0.21.0 | ASAP | GPL-2.0-or-later | Plays .sap (and .cmc, .rmt, .tmc and others). |
 
 Each one goes into `third_party/` with its licence and is listed in
 `third_party/README.md` and on the app's Licenses page, like the libraries
@@ -79,7 +77,7 @@ already there. No ROMs, tunes or archive contents are ever added to git.
 
 ---
 
-## 0.12.0: Mute and solo voices
+## 0.12.0 (part 1): Mute and solo voices
 
 **Why first:** the per-channel scopes are already there and every engine
 can mute voices, so this is a small, fun change.
@@ -109,7 +107,7 @@ voices are back. Keys 1-9 and 0.
 **Test on Android:** tap and long press on scopes on the main screen; the
 "Unmute all" button; the second screen shows the state.
 
-## 0.13.0: Seeking and a scrub bar
+## 0.12.0 (part 2): Seeking and a scrub bar
 
 **Core:** new `cd_seek_ms(p, ms)`. libxmp and libtfmxaudiodecoder have
 their own seek (`xmp_seek_time`, `tfmxdec_seek`). SID, SNDH, YM and TFMX-ST
@@ -135,7 +133,7 @@ and a digi tune (digis should still sound right afterwards).
 the lock screen, and on the second screen. Note how long a 3-minute jump
 takes on a SID tune.
 
-## 0.14.0: C64 ROM setting
+## 0.12.0 (part 3): C64 ROM setting
 
 **Needs:** nothing.
 
@@ -155,7 +153,7 @@ failed before now show; clear the setting.
 **Test on Android:** set the ROMs from phone storage and play the same
 tune.
 
-## 0.15.0: Play history, play counts and "Most played"
+## 0.13.0 (part 1): Play history, play counts and "Most played"
 
 **Needs:** nothing. All Dart, same code on both platforms.
 
@@ -175,9 +173,9 @@ play Most played in random order; clear history.
 **Test on Android:** the same, plus that tunes played with the screen off
 are counted.
 
-## 0.16.0: Windows media keys, Android audio focus and lock-screen polish
+## 0.13.0 (part 2): Windows media keys, Android audio focus and lock-screen polish
 
-**Needs:** 0.13.0 for seeking from the lock screen and SMTC.
+**Needs:** the seeking in 0.12.0, for the lock screen and SMTC.
 
 **Windows:** register with SystemMediaTransportControls in the Windows
 runner (C++/WinRT, a method channel to Dart in `lib/platform/`). This
@@ -189,7 +187,7 @@ while ChipDeck is in the background.
 call or another app, lower the volume for a short sound (navigation
 prompt), carry on after a short interruption. Show the format badge
 (SID/SNDH/MOD...) as the notification picture. The seek bar comes from
-0.13.0.
+0.12.0.
 
 **Test on Windows:** keyboard media keys with ChipDeck in the background
 and minimised; the overlay that appears on volume change shows the tune;
@@ -197,7 +195,7 @@ a Bluetooth headset's buttons.
 **Test on Android:** start another music app (ChipDeck pauses); a
 notification sound (volume dips); headset buttons; lock screen controls.
 
-## 0.17.0: More module formats, and a Future Composer check
+## 0.13.0 (part 3): More module formats, and a Future Composer check
 
 **Needs:** nothing. libxmp is already bundled.
 
@@ -216,9 +214,9 @@ Future Composer 1.3 and 1.4 tunes.
 **Test on Android:** a few of the same files, and the filter on the small
 screen.
 
-## 0.18.0: HVSC download and update in the app
+## 0.14.0: HVSC download and update in the app
 
-**Needs:** nothing, but it is the base for 0.19.0 and 0.20.0.
+**Needs:** nothing, but it is the base for 0.15.0 and 0.16.0.
 
 **App:** a new "Get music" page (from the library's menu). For HVSC: shows
 the installed HVSC version (from `DOCUMENTS/` in the library location) and
@@ -230,7 +228,7 @@ resumed after a restart, and cancelled. It checks free space first and
 shows progress. A weekly check (on startup, at most once a week, can be
 switched off) shows a dot on the menu when an update is out.
 
-**Shared downloads code** (used by 0.19.0 and 0.20.0): resumable HTTPS
+**Shared downloads code** (used by 0.15.0 and 0.16.0): resumable HTTPS
 download to a temporary file, unzip with the `archive` package, then move
 into place, so a cancelled or failed download never leaves a broken
 folder. Android needs the INTERNET permission added.
@@ -246,9 +244,9 @@ update an older HVSC copy; the update dot.
 **Test on Android:** download to phone storage or SD card over Wi-Fi; turn
 the screen off during the download.
 
-## 0.19.0: SNDH archive download and update
+## 0.15.0: SNDH archive download and update
 
-**Needs:** 0.18.0.
+**Needs:** 0.14.0.
 
 **App:** "Get music" gets the SNDH archive: download the whole archive,
 check for a newer one, update by downloading again and replacing only
@@ -262,9 +260,9 @@ its version (on the test PC).
 tunes still work after the update.
 **Test on Android:** download and play.
 
-## 0.20.0: Modland browsing and downloads
+## 0.16.0: Modland browsing and downloads
 
-**Needs:** 0.18.0.
+**Needs:** 0.14.0.
 
 Modland is far too big to download whole, so it is browsed online instead.
 
@@ -283,7 +281,7 @@ on the test PC.
 first, download a folder, search for a tune; a TFMX pair plays.
 **Test on Android:** browse and play on mobile data and Wi-Fi.
 
-## 0.21.0: Sound options
+## 0.17.0: Sound options
 
 **Needs:** nothing.
 
@@ -307,9 +305,9 @@ boost on and off; MOD stereo separation at 0, 50 and 100 % on headphones;
 the gap and fade between tunes.
 **Test on Android:** the same settings, then restart (they are remembered).
 
-## 0.22.0: Crossfade between tunes
+## 0.18.0: Crossfade between tunes
 
-**Needs:** 0.21.0 (shares the gap/fade setting).
+**Needs:** 0.17.0 (shares the gap/fade setting).
 
 **Core:** `cd_audio` gets a second player so the next tune can start while
 the current one fades out; both are mixed in the audio callback. Crossfade
@@ -323,9 +321,9 @@ skip during a crossfade; pause during a crossfade; random order.
 **Test on Android:** the same, with the screen off for a few tunes;
 check the battery use doesn't jump.
 
-## 0.23.0: Export to WAV and FLAC
+## 0.19.0: Export to WAV and FLAC
 
-**Needs:** 0.12.0 (mutes) and 0.21.0 (sound options), so the export sounds
+**Needs:** 0.12.0 (mutes) and 0.17.0 (sound options), so the export sounds
 like the player.
 
 **Core:** `cd_export(path, format, subtune, length_ms, fade_ms, ...)` that
@@ -345,7 +343,7 @@ muted voice; export a whole playlist.
 **Test on Android:** export a tune and open it in another app; set it as a
 ringtone.
 
-## 0.24.0: AHX and HivelyTracker
+## 0.20.0: AHX and HivelyTracker
 
 **Needs:** nothing.
 
@@ -353,14 +351,14 @@ ringtone.
 `hvl_backend.cpp` for `.ahx` and `.hvl`: subtunes, length (by playing it
 through once, like libxmp), per-channel scopes (4 for AHX, up to 16 for
 HVL; a small "ChipDeck patch" like the other engines), mute (0.12.0),
-seeking (0.13.0). Our own small test tune made by a script in `tools/`.
+seeking (0.12.0). Our own small test tune made by a script in `tools/`.
 **App:** formats in the Amiga group, AHX/HVL badges.
 
 **Test on Windows:** AHX and HVL tunes from Modland, scopes, mute, seek,
 subtunes.
 **Test on Android:** a few of the same.
 
-## 0.25.0: SAP (Atari 8-bit)
+## 0.21.0: SAP (Atari 8-bit)
 
 **Needs:** nothing.
 
@@ -380,6 +378,6 @@ mute, seek, subtunes; the new filter group.
 ## Later, not planned yet
 
 - ASMA (Atari 8-bit archive) in "Get music", once SAP plays (reuses
-  0.18.0).
+  0.14.0).
 - Writable mute toggles on the Android second screen.
-- Smart lists by format or composer (reusing the 0.15.0 smart lists).
+- Smart lists by format or composer (reusing the 0.13.0 smart lists).
