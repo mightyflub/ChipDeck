@@ -74,6 +74,10 @@ and the version is given whenever a build is shared.
   docs/screenshots/desktop-format-filter.png, desktop-wide-1920.png,
   landscape-format-filter.png. Details: NOTES.md (2026-11-04, Format
   filter and desktop layout).
+  The desktop Now playing is wrapped in its own `Semantics` container:
+  without it, Flutter's Windows accessibility bridge crashed during a
+  library scan (0.9.0-test.79; see NOTES.md). Keep it if you rework that
+  layout.
 - **TFMX and TFMX-ST (0.8.0, branch claude/project-thread-ir84g9):**
   Amiga TFMX (v1.5, Pro, 7V; also Hippel TFMX and Future Composer, which
   come with the same library) is played by vendored libtfmxaudiodecoder

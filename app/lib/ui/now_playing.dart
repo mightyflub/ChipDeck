@@ -39,7 +39,15 @@ class NowPlaying extends StatelessWidget {
             // Desktop windows: the scopes (or tune info) fill the height
             // between the title and the controls, nothing scrolls.
             if (!compact && box.maxHeight >= 560) {
-              return _Desktop(controller: c, info: info, remote: remote);
+              // Its own semantics container: without it, Flutter's Windows
+              // accessibility bridge crashed (0.9.0-test.79, null parent in
+              // AccessibilityBridge::CreateRemoveReparentedNodesUpdate)
+              // while a library scan updated the screen. See NOTES.md.
+              return Semantics(
+                container: true,
+                explicitChildNodes: true,
+                child: _Desktop(controller: c, info: info, remote: remote),
+              );
             }
             return SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(pad, pad, pad, pad),
