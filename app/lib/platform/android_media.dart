@@ -61,7 +61,14 @@ class AndroidMedia {
         return null;
     }
     if (call.method != 'mediaAction') return null;
-    switch (call.arguments as String?) {
+    final action = call.arguments as String?;
+    // Seek bar in the notification or on the lock screen.
+    if (action != null && action.startsWith('seek:')) {
+      final ms = int.tryParse(action.substring(5));
+      if (ms != null) _player.seekTo(ms);
+      return null;
+    }
+    switch (action) {
       case 'toggle':
         _player.togglePlay();
       case 'play':
@@ -88,7 +95,12 @@ class AndroidMedia {
         ? ''
         : ' (${info.currentSubtune}/${info.subtunes})';
     final text = author.isEmpty ? info?.format ?? '' : author;
-    final key = '$active|${_player.playing}|$title$sub|$text';
+    // Android moves the notification's seek bar on by itself; send the
+    // position again only when it jumps (new tune, pause, seek).
+    final len = _player.effectiveLengthMs;
+    final key =
+        '$active|${_player.playing}|$title$sub|$text|$len|'
+        '${_player.seeking}|${_player.seekCount}';
     if (key == _lastKey) return; // the player notifies every 200 ms
     _lastKey = key;
     if (!active) {
@@ -99,6 +111,8 @@ class AndroidMedia {
       'title': '$title$sub',
       'text': text,
       'playing': _player.playing,
+      'positionMs': _player.positionMs,
+      'lengthMs': _player.canSeek ? len : -1,
     });
   }
 }

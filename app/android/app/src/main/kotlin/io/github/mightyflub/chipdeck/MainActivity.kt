@@ -42,6 +42,8 @@ class MainActivity : FlutterActivity() {
                         call.argument<String>("title") ?: "",
                         call.argument<String>("text") ?: "",
                         call.argument<Boolean>("playing") ?: false,
+                        (call.argument<Number>("positionMs") ?: 0).toLong(),
+                        (call.argument<Number>("lengthMs") ?: -1).toLong(),
                     )
                     result.success(null)
                 }

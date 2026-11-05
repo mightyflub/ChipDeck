@@ -83,6 +83,36 @@ keep it up to date when a platform is tried.
 
 ## Current state (2026-11-05)
 
+- **Mute/solo, seeking and C64 ROMs (0.12.0, branch claude/project-thread-sj4076):**
+  the first release of [ROADMAP.md](ROADMAP.md); the owner asked for these
+  three in one build. Core API: `cd_set_mute_mask`/`cd_mute_mask` (bit n =
+  channel n as for `cd_channel_name`; kept across subtunes, cleared on
+  load), `cd_seek_ms`, and `cd_info.basic_tune` (the Dart struct mirrors
+  it). Each backend has `setMute()`/`seek()`: AtariAudio `MuteVoices` +
+  `FastForward`; libxmp `xmp_channel_mute` + `xmp_seek_time` to the
+  pattern start, then render the rest; libtfmxaudiodecoder
+  `tfmxdec_mute_voice` + `tfmxdec_seek`; TFMX-ST mutes its YM and runs
+  only the 50 Hz replay ticks. SID: voices 1-3 are muted inside reSIDfp
+  at once (new patch), Digi through libsidplayfp's register masking;
+  seeking runs the C64 with the SID chips not clocked
+  (`ReSIDfpBuilder::skipClock`, new patch): ~75x real time in the cloud
+  container, so a 3-minute jump takes ~2 s there; the app seeks in a
+  background isolate (`ChipDeckEngine.seek`) with the output paused. All
+  patches are listed in third_party/README.md. Tests:
+  `tests/mute_seek_test.cpp` (every format: mute all is silent, unmute,
+  mask kept/cleared, seek forward/back within 30 ms, SID 3-minute seek
+  under 5 s). App: channel scopes are mute buttons (tap/click mutes,
+  long press/right-click solos, "Unmute all"; keys 1-9 and 0), the
+  position bar is a scrub bar (Shift+Left/Right 10 s), the Android
+  notification and lock screen get a seek bar (MediaSession
+  `ACTION_SEEK_TO`, position sent on tune/pause/seek changes), the
+  second-screen controls get a scrub bar and "N muted · unmute". Settings
+  has "C64 ROMs" (BASIC, KERNAL, characters; "Find in folder…" looks for
+  kernal*/basic*/chargen* by size), stored as `romKernal`/`romBasic`/
+  `romChargen`; Now playing warns for a BASIC tune without the BASIC ROM.
+  Same code on Windows and Android. Checked under Xvfb on Linux (mute,
+  solo, seek, settings); not yet tried on Windows or Android.
+
 - **Favourites and your own playlists (0.11.0, branch claude/project-thread-v2ksvd):**
   Stephen asked (2026-11-05) for favourites and user-made playlists, testing
   on Windows first. The Playlist panel is now "Playlists": a picker in its

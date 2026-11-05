@@ -113,7 +113,13 @@ Future<String?> pickSingleFile(
     return (paths == null || paths.isEmpty) ? null : paths.first;
   }
   final f = await openFile(
-    acceptedTypeGroups: [XTypeGroup(label: label, extensions: extensions)],
+    // No extensions: any file (C64 ROMs often have none).
+    acceptedTypeGroups: [
+      XTypeGroup(
+        label: label,
+        extensions: extensions.isEmpty ? null : extensions,
+      ),
+    ],
   );
   return f?.path;
 }

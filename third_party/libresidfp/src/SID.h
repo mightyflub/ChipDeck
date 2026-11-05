@@ -270,6 +270,12 @@ public:
     void setVoiceTap(int16_t* tap) { voiceTap = tap; }
 
     /**
+     * ChipDeck patch: leave voice 0..2 out of the mix (at once, unlike
+     * masking register writes), or put it back.
+     */
+    void muteVoice(int v, bool mute);
+
+    /**
      * Setting of SID sampling parameters.
      *
      * Use a clock freqency of 985248Hz for PAL C64, 1022730Hz for NTSC C64.

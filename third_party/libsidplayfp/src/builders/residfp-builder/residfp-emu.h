@@ -42,6 +42,7 @@ class reSIDfpEmu final : public sidemu
 {
 private:
     reSIDfp::residfp &m_sid;
+    bool m_skipClock = false;  // ChipDeck patch, see skipClock()
 
 public:
     static const char* getCredits();
@@ -68,6 +69,17 @@ public:
 
     // Specific to residfp
     void enableFilter(bool enable) { m_sid.enableFilter(enable); }
+
+    // ChipDeck patch: voices 1-3 are muted inside reSIDfp at once; the
+    // samples "voice" (3, the $D418 volume) by sidemu's register masking.
+    void voice(unsigned int voice, bool mute) override
+    {
+        if (voice < 3) m_sid.muteVoice(static_cast<int>(voice), mute);
+        else sidemu::voice(voice, mute);
+    }
+
+    // ChipDeck patch: skip the chip emulation (for fast seeking).
+    void skipClock(bool skip) { m_skipClock = skip; }
 
     void filter6581Curve(double filterCurve) { m_sid.setFilter6581Curve(filterCurve); }
 

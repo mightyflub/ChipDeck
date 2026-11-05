@@ -81,4 +81,9 @@ if(CHIPDECK_BUILD_TESTS)
   target_compile_definitions(chipdeck-tfmx-tests PRIVATE
     CHIPDECK_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
   add_test(NAME tfmx COMMAND chipdeck-tfmx-tests)
+  add_executable(chipdeck-mute-seek-tests tests/mute_seek_test.cpp)
+  target_link_libraries(chipdeck-mute-seek-tests PRIVATE chipdeck-core)
+  target_compile_definitions(chipdeck-mute-seek-tests PRIVATE
+    CHIPDECK_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+  add_test(NAME mute_seek COMMAND chipdeck-mute-seek-tests)
 endif()

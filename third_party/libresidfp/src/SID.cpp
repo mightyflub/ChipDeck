@@ -644,3 +644,16 @@ void SID::setDCBRes(double res)
 }
 
 } // namespace reSIDfp
+
+namespace reSIDfp
+{
+
+// ChipDeck patch
+void SID::muteVoice(int v, bool mute)
+{
+    if (v < 0 || v > 2) return;
+    filter6581->chipdeckMute[v] = mute;
+    filter8580->chipdeckMute[v] = mute;
+}
+
+}

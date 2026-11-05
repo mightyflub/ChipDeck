@@ -35,6 +35,9 @@ class _ControlsScreenState extends State<ControlsScreen> {
   static const _channel = MethodChannel('chipdeck/controls');
   RemoteState _s = const RemoteState();
 
+  /// Where the position bar is being dragged to (0..1).
+  double? _drag;
+
   @override
   void initState() {
     super.initState();
@@ -126,25 +129,65 @@ class _ControlsScreenState extends State<ControlsScreen> {
 
   Widget _progress(RemoteState s) {
     final len = s.lengthMs;
-    final frac = len == null || len == 0
-        ? 0.0
-        : (s.positionMs / len).clamp(0.0, 1.0);
+    final drag = _drag;
+    final pos = drag != null && len != null
+        ? (len * drag).round()
+        : s.positionMs;
+    final frac = len == null || len == 0 ? 0.0 : (pos / len).clamp(0.0, 1.0);
     const style = TextStyle(color: Palette.textMuted, fontFeatures: tabular);
+    final bar = ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: LinearProgressIndicator(
+        value: frac,
+        minHeight: 6,
+        backgroundColor: Palette.panelHigh,
+        valueColor: const AlwaysStoppedAnimation(Palette.accent),
+      ),
+    );
     return Column(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: frac,
-            minHeight: 6,
-            backgroundColor: Palette.panelHigh,
-            valueColor: const AlwaysStoppedAnimation(Palette.accent),
+        if (!s.canSeek || len == null)
+          bar
+        else
+          LayoutBuilder(
+            builder: (context, box) {
+              double at(double dx) =>
+                  box.maxWidth <= 0 ? 0 : (dx / box.maxWidth).clamp(0.0, 1.0);
+              void seek(double f) => _send('seek', (len * f).round());
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (d) => seek(at(d.localPosition.dx)),
+                onHorizontalDragStart: (d) =>
+                    setState(() => _drag = at(d.localPosition.dx)),
+                onHorizontalDragUpdate: (d) =>
+                    setState(() => _drag = at(d.localPosition.dx)),
+                onHorizontalDragEnd: (_) {
+                  final f = _drag;
+                  setState(() => _drag = null);
+                  if (f != null) seek(f);
+                },
+                onHorizontalDragCancel: () => setState(() => _drag = null),
+                child: SizedBox(
+                  height: 24,
+                  child: Align(alignment: Alignment.center, child: bar),
+                ),
+              );
+            },
           ),
-        ),
         const SizedBox(height: 6),
         Row(
           children: [
-            Text(formatMs(s.positionMs), style: style),
+            Text(formatMs(pos), style: style),
+            if (s.muted > 0) ...[
+              const SizedBox(width: 10),
+              GestureDetector(
+                onTap: () => _send('unmuteAll'),
+                child: Text(
+                  '${s.muted} muted · unmute',
+                  style: const TextStyle(color: Palette.warm, fontSize: 12),
+                ),
+              ),
+            ],
             const Spacer(),
             Text(
               len == null ? '∞' : '${s.lengthKnown ? '' : '~'}${formatMs(len)}',

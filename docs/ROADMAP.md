@@ -40,6 +40,9 @@ Some of the ideas are partly done, so their releases are smaller:
   `xmp_channel_mute()`, libtfmxaudiodecoder `tfmxdec_mute_voice()`; our own
   TFMX-ST player can do it directly).
 
+Status: 0.12.0 is built (PR for the roadmap branch), waiting for the
+owner's test on Windows.
+
 ## The releases at a glance
 
 | Version | What | Size | Mostly |
@@ -82,22 +85,21 @@ already there. No ROMs, tunes or archive contents are ever added to git.
 **Why first:** the per-channel scopes are already there and every engine
 can mute voices, so this is a small, fun change.
 
-**Core:** new `cd_set_channel_mute(p, ch, muted)` and
-`cd_channel_muted(p, ch)`, using the same channel numbers as
-`cd_channel_name()`. Each backend maps it to its engine's mute call. The
+**Core:** new `cd_set_mute_mask(p, mask)` and `cd_mute_mask(p)` (bit n =
+channel n, the same numbers as `cd_channel_name()`). Each backend maps it to its engine's mute call. The
 mute state is kept when changing subtune (AtariAudio unmutes on
 `InitSubSong`, so the core sets it again) and cleared when a new file loads.
 For SID, "Digi" maps to libsidplayfp voice 3 (samples); check that our
-`$D418` digi scope matches what gets muted. Tests in each backend test file:
-a muted channel's scope is silent and the mix changes.
+`$D418` digi scope matches what gets muted. Tests
+(`tests/mute_seek_test.cpp`): muting every channel silences the mix, the
+mask is kept across subtunes and cleared on load.
 
 **App:** click or tap a scope to mute or unmute it; right-click, or long
 press on Android, to solo it (again to un-solo). Muted scopes are dimmed and
 show a crossed speaker. An "Unmute all" button appears while anything is
-muted. Keys 1-9 toggle channels 1-9 and 0 unmutes all. In "Mix" scope view
-the toggles appear as small numbered chips instead. The Android
-second-screen controls show which voices are muted (read only to start
-with).
+muted. Keys 1-9 toggle channels 1-9 and 0 unmutes all. Muted scopes
+stay visible (dimmed). The Android second-screen controls show how many
+channels are muted, with a tap to unmute all.
 
 **Test on Windows:** play a 3-voice SID and mute each voice by clicking its
 scope; solo the bass; try a 2SID tune (6 voices); a digi tune (mute Digi);
@@ -142,14 +144,14 @@ CHARGEN files one by one or point at a folder that has them (VICE names
 such as `kernal-901227-03.bin`, `basic-901226-01.bin`,
 `chargen-901225-01.bin` are recognised). Sizes are checked (8 KB, 8 KB,
 4 KB); the setting shows which ROMs are set. Passed to `cd_set_roms()` on
-the player and to the library's tune probes. The scan report and the
-"won't play" message for a BASIC tune say that a BASIC ROM is needed and
-where to set it. Re-probe the RSID tunes that failed when ROMs are added.
-ROMs are never shipped or downloaded by the app.
+the player. A BASIC tune without the BASIC ROM loads but stays silent
+(no error), so the core reports `cd_info.basic_tune` and Now playing says
+the BASIC ROM is needed and where to set it. ROMs are never shipped or
+downloaded by the app.
 
 **Test on Windows:** play an RSID BASIC tune without ROMs (clear message),
-set the ROMs, play it again; refresh the library and check that tunes that
-failed before now show; clear the setting.
+set the ROMs, play it again; "Find in folder…" with an emulator's ROM
+folder; clear the setting.
 **Test on Android:** set the ROMs from phone storage and play the same
 tune.
 

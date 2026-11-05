@@ -33,6 +33,18 @@ upgrade (`grep -rn "ChipDeck patch" third_party`):
 - libsidplayfp `player.h/.cpp`, `sidplayfp/sidplayfp.h/.cpp`:
   `voiceBuffers()` returns those buffers, like `buffers()`.
 
+- libresidfp `Filter.h`, `SID.h/.cpp`, `residfp/residfp.h/.cpp` (0.12.0):
+  `muteVoice()` leaves a voice out of the mix at once (`chipdeckMute`),
+  while `lastVoiceOut` still feeds its scope.
+- libsidplayfp `sidemu.h` (0.12.0): `voice()` is virtual; reSIDfp's
+  emu overrides it so voices 1-3 use `muteVoice()` (the "samples" voice
+  keeps sidemu's register masking).
+- libsidplayfp `builders/residfp-builder/residfp-emu.h/.cpp`,
+  `residfp.h`, `residfp-builder.cpp` (0.12.0): `ReSIDfpBuilder::skipClock()`
+  stops clocking the chips while seeking (register writes still reach
+  them), so a SID tune can be run forward many times faster than real
+  time.
+
 - libxmp `src/common.h`, `src/mixer.c`, `include/xmp.h`: a per-channel
   output tap (`xmp_chipdeck_set_tap`, `xmp_chipdeck_read_tap`). The
   softmixer copies the mix buffer before each voice and credits the

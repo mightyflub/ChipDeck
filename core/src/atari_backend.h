@@ -47,6 +47,11 @@ public:
     int channelCount() const { return static_cast<int>(chanBytes_.size()); }
     const char* channelName(int ch) const;
     uint32_t positionMs() const;
+    // Mute channels: bit n mutes channel n (as numbered for the scopes).
+    // Kept when the subtune changes.
+    void setMute(uint32_t mask);
+    // Jump to `ms` from the start of the current subtune.
+    void seek(uint32_t ms);
 
 private:
     AtariTune() = default;
@@ -54,6 +59,7 @@ private:
     uint32_t rate_ = 0;
     int current_ = 1;
     uint64_t framesPlayed_ = 0;
+    uint32_t mute_ = 0;
     std::vector<int16_t> mono_;
     std::vector<uint32_t> visual_;
     std::vector<int> chanBytes_;  // byte of AtariAudio's visual info per channel

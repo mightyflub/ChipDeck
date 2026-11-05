@@ -63,6 +63,7 @@ typedef struct cd_info {
     int is_ntsc;          /* 1 if the tune runs at NTSC speed */
     int32_t length_ms;    /* from Songlengths database, or -1 if unknown */
     int system;           /* cd_system; added in 0.6.0 (Dart maps this struct) */
+    int basic_tune;       /* 1 for a C64 BASIC program (needs the BASIC ROM, cd_set_roms); 0.12.0 */
 } cd_info;
 
 /* Library version string, e.g. "0.1.0 (libsidplayfp 3.1.2)". */
@@ -103,6 +104,19 @@ CD_API size_t cd_render(cd_player* p, int16_t* out, size_t frames);
 
 /* Playback position in milliseconds since the current subtune started. */
 CD_API uint32_t cd_position_ms(cd_player* p);
+
+/* Jump to `ms` from the start of the current subtune (0.12.0). Formats
+ * without a seek of their own (SID, SNDH, YM, TFMX-ST) run the emulation
+ * forward without making sound; going back restarts the subtune first.
+ * Blocks cd_render() meanwhile (a 3-minute SID jump is well under a
+ * second on a PC). Returns 0 on success. */
+CD_API int cd_seek_ms(cd_player* p, uint32_t ms);
+
+/* Mute channels (0.12.0): bit n mutes channel n, numbered as for
+ * cd_channel_name(). Kept when the subtune changes, cleared when a tune
+ * is loaded. The channel scopes keep showing muted channels. */
+CD_API void cd_set_mute_mask(cd_player* p, uint32_t mask);
+CD_API uint32_t cd_mute_mask(cd_player* p);
 
 /* Copy the 32 registers of SID chip `chip` (0-based), for visualisers.
  * Returns 0 on success. Register layout is the C64 SID ($D400-$D41F). */

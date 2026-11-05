@@ -31,6 +31,8 @@ class PlaybackService : Service() {
     private var title = ""
     private var text = ""
     private var playing = false
+    private var positionMs = 0L
+    private var lengthMs = -1L // -1: unknown, no seek bar
     private var foreground = false
 
     private val noisy = object : BroadcastReceiver() {
@@ -58,6 +60,7 @@ class PlaybackService : Service() {
                 override fun onSkipToNext() { onAction?.invoke("next") }
                 override fun onSkipToPrevious() { onAction?.invoke("previous") }
                 override fun onStop() { onAction?.invoke("stop") }
+                override fun onSeekTo(pos: Long) { onAction?.invoke("seek:$pos") }
             })
             setSessionActivity(openAppIntent())
             isActive = true
@@ -76,32 +79,38 @@ class PlaybackService : Service() {
             else -> onAction?.invoke(action)
         }
         intent?.getStringExtra(EXTRA_TITLE)?.let {
-            apply(it, intent.getStringExtra(EXTRA_TEXT) ?: "", intent.getBooleanExtra(EXTRA_PLAYING, false))
+            apply(
+                it, intent.getStringExtra(EXTRA_TEXT) ?: "", intent.getBooleanExtra(EXTRA_PLAYING, false),
+                intent.getLongExtra(EXTRA_POSITION, 0L), intent.getLongExtra(EXTRA_LENGTH, -1L),
+            )
         }
         return START_NOT_STICKY
     }
 
-    private fun apply(t: String, x: String, p: Boolean) {
+    private fun apply(t: String, x: String, p: Boolean, pos: Long, len: Long) {
         title = t
         text = x
         playing = p
-        session.setMetadata(
-            MediaMetadataCompat.Builder()
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
-                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, text)
-                .build(),
-        )
+        positionMs = pos
+        lengthMs = len
+        // A known length gives the notification and lock screen a seek bar.
+        val meta = MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, text)
+        if (lengthMs > 0) meta.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, lengthMs)
+        session.setMetadata(meta.build())
         session.setPlaybackState(
             PlaybackStateCompat.Builder()
                 .setActions(
                     PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or
                         PlaybackStateCompat.ACTION_PLAY_PAUSE or PlaybackStateCompat.ACTION_STOP or
                         PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS,
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                        (if (lengthMs > 0) PlaybackStateCompat.ACTION_SEEK_TO else 0L),
                 )
                 .setState(
                     if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
-                    PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f,
+                    positionMs, 1f,
                 )
                 .build(),
         )
@@ -193,16 +202,21 @@ class PlaybackService : Service() {
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_TEXT = "text"
         private const val EXTRA_PLAYING = "playing"
+        private const val EXTRA_POSITION = "positionMs"
+        private const val EXTRA_LENGTH = "lengthMs"
 
         private var instance: PlaybackService? = null
 
         /** Set by MainActivity: forwards "toggle", "next", ... to Dart. */
         var onAction: ((String) -> Unit)? = null
 
-        fun update(context: Context, title: String, text: String, playing: Boolean) {
+        fun update(
+            context: Context, title: String, text: String, playing: Boolean,
+            positionMs: Long, lengthMs: Long,
+        ) {
             val s = instance
             if (s != null) {
-                s.apply(title, text, playing)
+                s.apply(title, text, playing, positionMs, lengthMs)
                 return
             }
             if (!playing) return // nothing to show until something plays
@@ -210,6 +224,8 @@ class PlaybackService : Service() {
                 .putExtra(EXTRA_TITLE, title)
                 .putExtra(EXTRA_TEXT, text)
                 .putExtra(EXTRA_PLAYING, true)
+                .putExtra(EXTRA_POSITION, positionMs)
+                .putExtra(EXTRA_LENGTH, lengthMs)
             try {
                 ContextCompat.startForegroundService(context, intent)
             } catch (_: Exception) {

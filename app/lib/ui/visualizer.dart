@@ -2,6 +2,8 @@
 // corner, remembered): one oscilloscope per channel (SID voices + Digi,
 // Atari YM A/B/C + STE DAC, one per tracker channel for MOD/XM), or the mixed
 // output with SID voice tiles.
+// Channel scopes are also the mute buttons (0.12.0): click or tap one to
+// mute it, right-click or long press to hear only that one.
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -188,9 +190,17 @@ class _VisualizerState extends State<Visualizer>
   @override
   Widget build(BuildContext context) {
     final channels = widget.controller.showChannels;
+    final anyMuted = widget.controller.muteMask != 0;
     return Stack(
       children: [
         channels ? _buildChannels(context) : _buildMix(context),
+        if (anyMuted)
+          Positioned(
+            left: channels ? 4 : 6,
+            bottom: channels ? 4 : null,
+            top: channels ? null : 6,
+            child: _UnmuteAllButton(onPressed: widget.controller.unmuteAll),
+          ),
         // Channel tiles have labels at the top; the mixed scope has none.
         Positioned(
           top: channels ? null : 6,
@@ -259,6 +269,9 @@ class _VisualizerState extends State<Visualizer>
                   samples: i < _chans.length ? _chans[i] : null,
                   peak: i < _peaks.length ? _peaks[i] : 0,
                   voice: _voiceFor(i),
+                  muted: widget.controller.isMuted(i),
+                  onToggle: () => widget.controller.toggleMute(i),
+                  onSolo: () => widget.controller.solo(i),
                 ),
               ),
           ],
@@ -506,23 +519,82 @@ class _ModeButton extends StatelessWidget {
   }
 }
 
+/// "Unmute all", shown over the scopes while any channel is muted.
+class _UnmuteAllButton extends StatelessWidget {
+  const _UnmuteAllButton({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Palette.warm.withValues(alpha: 0.18),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Palette.warm.withValues(alpha: 0.6)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onPressed,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.volume_up_rounded, size: 14, color: Palette.warm),
+              SizedBox(width: 4),
+              Text(
+                'Unmute all',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Palette.warm,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// One channel: name (and note/waveform for SID voices) over its scope.
+/// Click/tap mutes it; right-click/long press solos it.
 class _ChannelTile extends StatelessWidget {
   const _ChannelTile({
     required this.name,
     required this.samples,
     required this.peak,
     required this.voice,
+    required this.muted,
+    required this.onToggle,
+    required this.onSolo,
   });
   final String name;
   final Int16List? samples;
   final double peak;
   final _VoiceState? voice;
+  final bool muted;
+  final VoidCallback onToggle;
+  final VoidCallback onSolo;
 
   @override
   Widget build(BuildContext context) {
-    final col = channelColor(name);
-    final active = peak > 600;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onToggle,
+        onLongPress: onSolo,
+        onSecondaryTap: onSolo,
+        child: Opacity(opacity: muted ? 0.45 : 1, child: _tile()),
+      ),
+    );
+  }
+
+  Widget _tile() {
+    final col = muted ? Palette.textMuted : channelColor(name);
+    final active = peak > 600 && !muted;
     final v = voice;
     final label = name == 'Digi' || name.endsWith(':Digi')
         ? name
@@ -548,6 +620,14 @@ class _ChannelTile extends StatelessWidget {
               right: 8,
               child: Row(
                 children: [
+                  if (muted) ...[
+                    const Icon(
+                      Icons.volume_off_rounded,
+                      size: 13,
+                      color: Palette.warm,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                   Text(
                     label,
                     style: TextStyle(

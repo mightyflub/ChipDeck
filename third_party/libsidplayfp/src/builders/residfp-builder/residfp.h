@@ -111,6 +111,13 @@ public:
      */
     void dcbRes(double res);
 
+    /**
+     * ChipDeck patch: stop (true) or resume (false) clocking the SID chips,
+     * for fast seeking. Register writes still reach the chips; no samples
+     * are made while skipping.
+     */
+    void skipClock(bool skip);
+
 private:
     struct config;
     config *m_config;

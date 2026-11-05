@@ -95,6 +95,10 @@ void reSIDfpEmu::clock()
 {
     const event_clock_t cycles = eventScheduler->getTime(EVENT_CLOCK_PHI1) - m_accessClk;
     m_accessClk += cycles;
+    // ChipDeck patch: while seeking, the chip is not clocked (no sound is
+    // made); register writes still reach it, so it carries on from the
+    // right settings when clocking resumes.
+    if (m_skipClock) return;
     m_sid.setVoiceTap(m_voiceBuffer ? m_voiceBuffer + m_bufferpos * 4 : nullptr);
     m_bufferpos += m_sid.clock(cycles, m_buffer+m_bufferpos);
 }

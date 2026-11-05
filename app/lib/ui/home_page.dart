@@ -109,7 +109,30 @@ class _HomePageState extends State<HomePage> {
     }
     if (_typing()) return KeyEventResult.ignored;
     final k = e.logicalKey;
-    if (k == LogicalKeyboardKey.space) {
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    // Keys 1-9 mute/unmute channels 1-9, 0 unmutes all (0.12.0).
+    const digits = [
+      LogicalKeyboardKey.digit0,
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4,
+      LogicalKeyboardKey.digit5,
+      LogicalKeyboardKey.digit6,
+      LogicalKeyboardKey.digit7,
+      LogicalKeyboardKey.digit8,
+      LogicalKeyboardKey.digit9,
+    ];
+    final digit = digits.indexOf(k);
+    if (digit == 0 && e is KeyDownEvent) {
+      c.unmuteAll();
+    } else if (digit > 0 && e is KeyDownEvent) {
+      c.toggleMute(digit - 1);
+    } else if (shift && k == LogicalKeyboardKey.arrowRight) {
+      c.seekBy(10000); // Shift+Right/Left: jump 10 s (0.12.0)
+    } else if (shift && k == LogicalKeyboardKey.arrowLeft) {
+      c.seekBy(-10000);
+    } else if (k == LogicalKeyboardKey.space) {
       c.togglePlay();
     } else if (k == LogicalKeyboardKey.arrowRight) {
       c.nextSubtune();

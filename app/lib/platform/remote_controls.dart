@@ -26,6 +26,8 @@ class RemoteState {
     this.playlistIndex = 0,
     this.playlistLength = 0,
     this.shuffle = false,
+    this.muted = 0,
+    this.canSeek = false,
   });
 
   final bool hasTune;
@@ -46,6 +48,8 @@ class RemoteState {
   final int playlistIndex; // 1-based, 0 = none
   final int playlistLength;
   final bool shuffle;
+  final int muted; // number of muted channels
+  final bool canSeek;
 
   static RemoteState of(PlayerController c) {
     final e = c.current;
@@ -69,7 +73,17 @@ class RemoteState {
       playlistIndex: c.listPosition,
       playlistLength: c.listLength,
       shuffle: c.shuffle,
+      muted: _bitCount(c.muteMask),
+      canSeek: c.canSeek,
     );
+  }
+
+  static int _bitCount(int m) {
+    var n = 0;
+    for (; m != 0; m &= m - 1) {
+      n++;
+    }
+    return n;
   }
 
   Map<String, Object?> toMap() => {
@@ -91,6 +105,8 @@ class RemoteState {
     'playlistIndex': playlistIndex,
     'playlistLength': playlistLength,
     'shuffle': shuffle,
+    'muted': muted,
+    'canSeek': canSeek,
   };
 
   static RemoteState fromMap(Map<Object?, Object?> m) => RemoteState(
@@ -112,6 +128,8 @@ class RemoteState {
     playlistIndex: (m['playlistIndex'] as num?)?.toInt() ?? 0,
     playlistLength: (m['playlistLength'] as num?)?.toInt() ?? 0,
     shuffle: m['shuffle'] as bool? ?? false,
+    muted: (m['muted'] as num?)?.toInt() ?? 0,
+    canSeek: m['canSeek'] as bool? ?? false,
   );
 }
 
@@ -130,6 +148,10 @@ void applyRemoteAction(PlayerController c, String action, Object? value) {
       c.nextSubtune();
     case 'previousSubtune':
       c.previousSubtune();
+    case 'seek':
+      if (value is num) c.seekTo(value.toInt());
+    case 'unmuteAll':
+      c.unmuteAll();
     case 'subtune':
       if (value is num) c.selectSubtune(value.toInt());
     case 'volume':

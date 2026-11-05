@@ -157,7 +157,62 @@ bool ModTune::select(int subtune)
     tick_.clear();
     tickChans_.clear();
     tickPos_ = 0;
+    setMute(mute_);
     return true;
+}
+
+void ModTune::setMute(uint32_t mask)
+{
+    mute_ = mask;
+    xmp_context ctx = static_cast<xmp_context>(ctx_);
+    for (int c = 0; c < channels_; ++c)
+        xmp_channel_mute(ctx, c, (mask >> c) & 1u);
+}
+
+void ModTune::seek(uint32_t ms)
+{
+    xmp_context ctx = static_cast<xmp_context>(ctx_);
+    const uint64_t target = uint64_t(ms) * rate_ / 1000u;
+    if (target < framesPlayed_) select(current_);
+    if (target <= framesPlayed_) return;
+    // Jump to the start of the pattern playing at `ms` (times are counted
+    // from the start of the current sequence), unless that is behind us.
+    const uint64_t now = framesPlayed_;
+    tick_.clear();
+    tickChans_.clear();
+    tickPos_ = 0;
+    xmp_seek_time(ctx, static_cast<int>(ms));
+    if (xmp_play_frame(ctx) == 0)
+    {
+        xmp_frame_info fi;
+        xmp_get_frame_info(ctx, &fi);
+        // fi.time is the end of the frame just made; its start is where
+        // the pattern starts.
+        const double startMs = fi.time - fi.frame_time / 1000.0;
+        const uint64_t at = startMs > 0 ? static_cast<uint64_t>(startMs * rate_ / 1000.0) : 0;
+        if (at >= now && at <= target)
+        {
+            const size_t n = static_cast<size_t>(std::max(0, fi.buffer_size)) / 4;
+            const int16_t* b = static_cast<const int16_t*>(fi.buffer);
+            tick_.assign(b, b + n * 2);
+            tickChans_.assign(n * static_cast<size_t>(channels_), 0);
+            if (channels_ > 0)
+                xmp_chipdeck_read_tap(ctx, tickChans_.data(), static_cast<int>(n));
+            framesPlayed_ = at;
+        }
+        else
+        {
+            // Song loops or jumps backwards: play forward from where we were.
+            select(current_);
+        }
+    }
+    // Play the rest (less than one pattern, or all of it after a fallback).
+    std::vector<int16_t> scratch(4096 * 2);
+    while (framesPlayed_ < target)
+    {
+        const size_t n = static_cast<size_t>(std::min<uint64_t>(target - framesPlayed_, 4096));
+        render(scratch.data(), n, nullptr);
+    }
 }
 
 void ModTune::fillInfo(cd_info* out) const

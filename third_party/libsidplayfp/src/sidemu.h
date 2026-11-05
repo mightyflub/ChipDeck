@@ -115,7 +115,8 @@ public:
      * @param voice SID voice channels from 0 to 2, or 3 for samples
      * @param mute true to mute channel
      */
-    void voice(unsigned int voice, bool mute);
+    // ChipDeck patch: virtual, so reSIDfp can mute voices at once.
+    virtual void voice(unsigned int voice, bool mute);
 
     /**
      * Enable/disable filter.

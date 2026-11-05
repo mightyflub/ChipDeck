@@ -425,6 +425,22 @@ class _Header extends StatelessWidget {
           const SizedBox(height: 4),
           Text(i!.released, style: const TextStyle(color: Palette.textMuted)),
         ],
+        if (i != null && i.basicTune && !controller.hasBasicRom) ...[
+          const SizedBox(height: 8),
+          const Row(
+            children: [
+              Icon(Icons.info_outline_rounded, size: 16, color: Palette.warm),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'A C64 BASIC program: it needs the BASIC ROM to play. '
+                  'Set it in Settings, C64 ROMs.',
+                  style: TextStyle(color: Palette.warm, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -475,31 +491,104 @@ class _Chip extends StatelessWidget {
   }
 }
 
-class _Progress extends StatelessWidget {
+/// Position bar; drag or click it to jump (0.12.0). Shift+Left/Right on
+/// the keyboard jump 10 s.
+class _Progress extends StatefulWidget {
   const _Progress({required this.controller});
   final PlayerController controller;
 
   @override
+  State<_Progress> createState() => _ProgressState();
+}
+
+class _ProgressState extends State<_Progress> {
+  /// Where the bar is being dragged to (0..1), null when not dragging.
+  double? _drag;
+
+  double _fracAt(double dx, double width) =>
+      width <= 0 ? 0 : (dx / width).clamp(0.0, 1.0);
+
+  void _seekTo(double frac) {
+    final len = widget.controller.effectiveLengthMs;
+    if (len == null) return;
+    widget.controller.seekTo((len * frac).round());
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final c = controller;
+    final c = widget.controller;
     final len = c.effectiveLengthMs;
-    final pos = c.positionMs;
+    final canSeek = c.canSeek;
+    final drag = _drag;
+    final pos = drag != null && len != null
+        ? (len * drag).round()
+        : c.positionMs;
     final frac = len == null || len == 0 ? 0.0 : (pos / len).clamp(0.0, 1.0);
     final lenText = len == null
         ? '∞'
         : '${c.lengthIsKnown ? '' : '~'}${formatMs(len)}';
     return Column(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: len == null ? 0 : frac,
-            minHeight: 6,
-            backgroundColor: Palette.panelHigh,
-            valueColor: const AlwaysStoppedAnimation(Palette.accent),
-          ),
+        LayoutBuilder(
+          builder: (context, box) {
+            final w = box.maxWidth;
+            final bar = SizedBox(
+              height: 22,
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: len == null ? 0 : frac,
+                      minHeight: 6,
+                      backgroundColor: Palette.panelHigh,
+                      valueColor: const AlwaysStoppedAnimation(Palette.accent),
+                    ),
+                  ),
+                  if (canSeek)
+                    Positioned(
+                      left: (w * frac - 7).clamp(0.0, w - 14),
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: drag != null || c.seeking
+                              ? Palette.scope
+                              : Palette.accent,
+                          border: Border.all(
+                            color: const Color(0xFF080912),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+            if (!canSeek) return bar;
+            return MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (d) => _seekTo(_fracAt(d.localPosition.dx, w)),
+                onHorizontalDragStart: (d) =>
+                    setState(() => _drag = _fracAt(d.localPosition.dx, w)),
+                onHorizontalDragUpdate: (d) =>
+                    setState(() => _drag = _fracAt(d.localPosition.dx, w)),
+                onHorizontalDragEnd: (_) {
+                  final f = _drag;
+                  setState(() => _drag = null);
+                  if (f != null) _seekTo(f);
+                },
+                onHorizontalDragCancel: () => setState(() => _drag = null),
+                child: bar,
+              ),
+            );
+          },
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 2),
         Row(
           children: [
             Text(
@@ -509,6 +598,14 @@ class _Progress extends StatelessWidget {
                 fontFeatures: tabular,
               ),
             ),
+            if (c.seeking) ...[
+              const SizedBox(width: 8),
+              const SizedBox(
+                width: 10,
+                height: 10,
+                child: CircularProgressIndicator(strokeWidth: 1.5),
+              ),
+            ],
             const Spacer(),
             Tooltip(
               message: c.lengthIsKnown

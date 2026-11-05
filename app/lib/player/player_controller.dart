@@ -148,6 +148,21 @@ class PlayerController extends ChangeNotifier {
   bool playing = false;
   int positionMs = 0;
 
+  /// Muted channels of the playing tune (bit n = channel n of
+  /// [channelNames]). Kept across subtunes, cleared for a new tune.
+  int muteMask = 0;
+
+  /// True while a jump ([seekTo]) is running.
+  bool seeking = false;
+  int? _pendingSeek;
+
+  /// Counts finished jumps, so listeners can tell the position jumped.
+  int seekCount = 0;
+
+  /// C64 ROM files (Settings, optional). BASIC is needed by C64 BASIC
+  /// tunes; KERNAL and character ROM improve some RSID tunes.
+  String? kernalPath, basicPath, chargenPath;
+
   // settings
   double volume = 0.8;
   SidModel sidModel = SidModel.auto;
@@ -231,10 +246,18 @@ class PlayerController extends ChangeNotifier {
     showChannels = _prefs.getBool('channelScopes') ?? true;
     showTuneInfo = _prefs.getBool('tuneInfo') ?? false;
     stilPath = _prefs.getString('stil');
+    kernalPath = _prefs.getString('romKernal');
+    basicPath = _prefs.getString('romBasic');
+    chargenPath = _prefs.getString('romChargen');
     final e = _engine;
     if (e != null) {
       e.volume = volume;
       e.sidModel = sidModel;
+      if (!_applyRoms()) {
+        // A ROM file went missing or changed: forget the settings.
+        kernalPath = basicPath = chargenPath = null;
+        _applyRoms();
+      }
       if (songlengthsPath != null && !e.loadSonglengths(songlengthsPath!)) {
         songlengthsPath = null;
       }
@@ -295,12 +318,200 @@ class PlayerController extends ChangeNotifier {
     sidModel = m;
     _engine?.sidModel = m;
     _prefs.setInt('sidModel', m.index);
-    // Restart the current subtune so the change is audible.
-    if (current != null) {
-      final sub = info?.currentSubtune ?? 0;
-      _loadCurrent(subtune: sub, autoplay: playing);
-    }
+    _reloadCurrent();
     notifyListeners();
+  }
+
+  /// Restarts the current subtune so a setting is heard, keeping mutes.
+  void _reloadCurrent() {
+    if (current == null) return;
+    final sub = info?.currentSubtune ?? 0;
+    final mutes = muteMask;
+    _loadCurrent(subtune: sub, autoplay: playing);
+    if (mutes != 0) _setMute(mutes);
+  }
+
+  // ------------------------------------------------------------- C64 ROMs
+  bool get hasBasicRom => basicPath != null;
+
+  bool _applyRoms() =>
+      _engine?.setRoms(
+        kernal: kernalPath,
+        basic: basicPath,
+        chargen: chargenPath,
+      ) ??
+      true;
+
+  /// Sets one ROM file (null clears it). [which] is 'kernal', 'basic' or
+  /// 'chargen'. Returns an error message, or null when it worked.
+  String? setRom(String which, String? path) {
+    final old = (kernalPath, basicPath, chargenPath);
+    switch (which) {
+      case 'kernal':
+        kernalPath = path;
+      case 'basic':
+        basicPath = path;
+      default:
+        chargenPath = path;
+    }
+    if (!_applyRoms()) {
+      final err = _engine?.lastError ?? '';
+      _restoreRoms(old);
+      _applyRoms();
+      notifyListeners();
+      return romSizeHint(which, err);
+    }
+    _saveRoms();
+    _reloadCurrent();
+    notifyListeners();
+    return null;
+  }
+
+  /// Looks for ROM files in [folder] (VICE and common names, checked by
+  /// size) and uses the ones found. Returns how many were set.
+  int findRoms(String folder) {
+    final found = scanRomFolder(folder);
+    if (found.isEmpty) return 0;
+    final old = (kernalPath, basicPath, chargenPath);
+    kernalPath = found['kernal'] ?? kernalPath;
+    basicPath = found['basic'] ?? basicPath;
+    chargenPath = found['chargen'] ?? chargenPath;
+    if (!_applyRoms()) {
+      _restoreRoms(old);
+      _applyRoms();
+      notifyListeners();
+      return 0;
+    }
+    _saveRoms();
+    _reloadCurrent();
+    notifyListeners();
+    return found.length;
+  }
+
+  void _restoreRoms((String?, String?, String?) old) {
+    kernalPath = old.$1;
+    basicPath = old.$2;
+    chargenPath = old.$3;
+  }
+
+  void _saveRoms() {
+    void put(String key, String? v) =>
+        v == null ? _prefs.remove(key) : _prefs.setString(key, v);
+    put('romKernal', kernalPath);
+    put('romBasic', basicPath);
+    put('romChargen', chargenPath);
+  }
+
+  /// ROM size each kind must have, for messages.
+  static String romSizeHint(String which, String error) {
+    final size = which == 'chargen' ? '4 KB' : '8 KB';
+    final name = switch (which) {
+      'kernal' => 'KERNAL',
+      'basic' => 'BASIC',
+      _ => 'character',
+    };
+    return 'That is not a C64 $name ROM (it must be a $size file).';
+  }
+
+  /// Finds C64 ROM files in [folder] by name and size: kernal/basic/
+  /// chargen with any version suffix and extension (.bin, .rom, none),
+  /// as VICE and most emulators name them.
+  static Map<String, String> scanRomFolder(String folder) {
+    final found = <String, String>{};
+    final Iterable<FileSystemEntity> files;
+    try {
+      files = Directory(folder).listSync();
+    } catch (_) {
+      return found;
+    }
+    for (final f in files.whereType<File>()) {
+      final name = p.basename(f.path).toLowerCase();
+      final int size;
+      try {
+        size = f.lengthSync();
+      } catch (_) {
+        continue;
+      }
+      String? kind;
+      if (name.startsWith('kernal') && size == 8192) kind = 'kernal';
+      if (name.startsWith('basic') && size == 8192) kind = 'basic';
+      if ((name.startsWith('chargen') || name.startsWith('char')) &&
+          size == 4096) {
+        kind = 'chargen';
+      }
+      if (kind != null && !found.containsKey(kind)) found[kind] = f.path;
+    }
+    return found;
+  }
+
+  // ---------------------------------------------------- mute and solo
+  void _setMute(int mask) {
+    final n = channelNames.length;
+    final all = n >= 32 ? 0xFFFFFFFF : (1 << n) - 1;
+    muteMask = mask & all;
+    _engine?.muteMask = muteMask;
+    notifyListeners();
+  }
+
+  bool isMuted(int channel) => (muteMask >> channel) & 1 == 1;
+
+  /// Mutes or unmutes one channel (click a scope, or keys 1-9).
+  void toggleMute(int channel) {
+    if (channel < 0 || channel >= channelNames.length) return;
+    _setMute(muteMask ^ (1 << channel));
+  }
+
+  /// Plays only [channel]; again (when it is already the only one
+  /// playing) brings every channel back.
+  void solo(int channel) {
+    final n = channelNames.length;
+    if (channel < 0 || channel >= n) return;
+    final all = n >= 32 ? 0xFFFFFFFF : (1 << n) - 1;
+    final others = all & ~(1 << channel);
+    _setMute(muteMask == others ? 0 : others);
+  }
+
+  void unmuteAll() => _setMute(0);
+
+  // ------------------------------------------------------------ seeking
+  /// Whether the position bar can be dragged (needs a length).
+  bool get canSeek => info != null && effectiveLengthMs != null;
+
+  /// Jumps to [ms] in the playing subtune. A jump asked for while one is
+  /// running is done straight after it (only the latest).
+  Future<void> seekTo(int ms) async {
+    final e = _engine;
+    if (e == null || info == null) return;
+    final len = effectiveLengthMs;
+    if (len != null) ms = ms.clamp(0, len);
+    if (ms < 0) ms = 0;
+    positionMs = ms;
+    if (seeking) {
+      _pendingSeek = ms;
+      notifyListeners();
+      return;
+    }
+    seeking = true;
+    notifyListeners();
+    // Quiet while the core runs the tune forward.
+    e.playing = false;
+    int? target = ms;
+    while (target != null) {
+      _pendingSeek = null;
+      await e.seek(target);
+      target = _pendingSeek;
+    }
+    seeking = false;
+    seekCount++;
+    positionMs = e.positionMs;
+    e.playing = playing;
+    notifyListeners();
+  }
+
+  /// Jumps [deltaMs] forwards (or backwards when negative).
+  void seekBy(int deltaMs) {
+    if (!canSeek) return;
+    seekTo(positionMs + deltaMs);
   }
 
   bool setSonglengths(String? path) {
@@ -820,6 +1031,7 @@ class PlayerController extends ChangeNotifier {
     info = e.info;
     entry.info ??= info;
     positionMs = 0;
+    muteMask = 0; // the core clears mutes when a tune loads
     playing = autoplay;
     e.playing = autoplay;
     _ensureTicker();
@@ -946,7 +1158,7 @@ class PlayerController extends ChangeNotifier {
 
   void _tick() {
     final e = _engine;
-    if (e == null || !playing || info == null) return;
+    if (e == null || !playing || info == null || seeking) return;
     positionMs = e.positionMs;
     final len = effectiveLengthMs;
     if (len != null && positionMs >= len) {

@@ -146,3 +146,10 @@ void ReSIDfpBuilder::dcbRes(double res)
     for (libsidplayfp::sidemu* e: sidobjs)
         static_cast<libsidplayfp::reSIDfpEmu*>(e)->dcbRes(res);
 }
+
+// ChipDeck patch
+void ReSIDfpBuilder::skipClock(bool skip)
+{
+    for (libsidplayfp::sidemu* e: sidobjs)
+        static_cast<libsidplayfp::reSIDfpEmu*>(e)->skipClock(skip);
+}

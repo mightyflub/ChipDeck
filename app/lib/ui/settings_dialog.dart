@@ -161,6 +161,46 @@ class SettingsDialog extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 22),
+                  const _Label('C64 ROMs (optional)'),
+                  const SizedBox(height: 8),
+                  _RomRow(controller: c, which: 'basic', name: 'BASIC'),
+                  _RomRow(controller: c, which: 'kernal', name: 'KERNAL'),
+                  _RomRow(controller: c, which: 'chargen', name: 'Characters'),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'C64 BASIC tunes need the BASIC ROM; KERNAL and characters help a few RSID tunes. '
+                          'Use the ROM files from an emulator such as VICE.',
+                          style: TextStyle(
+                            color: Palette.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () async {
+                          final dir = await files.pickFolder(context);
+                          if (dir == null) return;
+                          final n = c.findRoms(dir);
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                n == 0
+                                    ? 'No C64 ROMs found in that folder (looked for kernal*, basic* and chargen* files).'
+                                    : 'Found $n C64 ROM${n == 1 ? '' : 's'}.',
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Find in folder…'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
                   const _Label('Default song length'),
                   const SizedBox(height: 8),
                   DropdownButton<int>(
@@ -212,7 +252,9 @@ class SettingsDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Keys: Space play/pause · ←/→ subtune · N/P next/previous tune · +/- volume',
+                    'Keys: Space play/pause · ←/→ subtune · Shift+←/→ jump 10 s · '
+                    'N/P next/previous tune · 1-9 mute a channel, 0 unmute all · +/- volume. '
+                    'Click a scope to mute it, right-click (long press) to hear only that one.',
                     style: TextStyle(color: Palette.textMuted, fontSize: 12),
                   ),
                 ],
@@ -235,6 +277,72 @@ class SettingsDialog extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// One C64 ROM setting: file name, choose, clear.
+class _RomRow extends StatelessWidget {
+  const _RomRow({
+    required this.controller,
+    required this.which,
+    required this.name,
+  });
+  final PlayerController controller;
+  final String which;
+  final String name;
+
+  String? get _path => switch (which) {
+    'kernal' => controller.kernalPath,
+    'basic' => controller.basicPath,
+    _ => controller.chargenPath,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final path = _path;
+    return Row(
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(
+            name,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            path == null ? 'Not set' : path.split(RegExp(r'[\\/]')).last,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: path == null ? Palette.textMuted : Colors.white,
+            ),
+          ),
+        ),
+        TextButton(
+          onPressed: () async {
+            final f = await files.pickSingleFile(
+              context,
+              label: '$name ROM',
+              extensions: const [],
+            );
+            if (f == null) return;
+            final err = controller.setRom(which, f);
+            if (err != null && context.mounted) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(err)));
+            }
+          },
+          child: const Text('Choose…'),
+        ),
+        if (path != null)
+          IconButton(
+            tooltip: 'Clear',
+            onPressed: () => controller.setRom(which, null),
+            icon: const Icon(Icons.close, size: 18),
+          ),
+      ],
     );
   }
 }

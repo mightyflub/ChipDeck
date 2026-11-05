@@ -113,7 +113,32 @@ bool AtariTune::select(int subtune)
     if (!renderer_->InitSubSong(subtune)) return false;
     current_ = subtune;
     framesPlayed_ = 0;
+    setMute(mute_);  // InitSubSong unmutes everything
     return true;
+}
+
+void AtariTune::setMute(uint32_t mask)
+{
+    mute_ = mask;
+    // AtariAudio's mask: bit 0-2 YM A-C, bit 3 STE DAC / sample channel.
+    uint32_t m = 0;
+    for (size_t k = 0; k < chanBytes_.size(); ++k)
+        if (mask & (1u << k)) m |= 1u << chanBytes_[k];
+    renderer_->MuteVoices(m);
+}
+
+void AtariTune::seek(uint32_t ms)
+{
+    const uint64_t target = uint64_t(ms) * rate_ / 1000u;
+    if (target < framesPlayed_) select(current_);
+    // No seek in AtariAudio: run the emulation without keeping the sound
+    // (about 80x real time).
+    while (framesPlayed_ < target)
+    {
+        const uint32_t n = static_cast<uint32_t>(std::min<uint64_t>(target - framesPlayed_, 1u << 16));
+        renderer_->FastForward(n);
+        framesPlayed_ += n;
+    }
 }
 
 void AtariTune::fillInfo(cd_info* out) const

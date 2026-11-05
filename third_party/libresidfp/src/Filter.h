@@ -108,6 +108,10 @@ public:
     /// ChipDeck patch: current master volume (0..15), the $D418 digi channel.
     uint8_t volume4bit() const { return vol; }
 
+    /// ChipDeck patch: voices muted by the player (left out of the mix at
+    /// once; lastVoiceOut still shows them).
+    bool chipdeckMute[3] = { false, false, false };
+
     /// ChipDeck patch: voice 3 silenced by the 3OFF bit (and not filtered).
     bool voice3Silenced() const { return voice3off && !filt3; }
 
@@ -229,18 +233,23 @@ RESIDFP_INLINE
 uint16_t Filter::clock(Voice& voice1, Voice& voice2, Voice& voice3)
 {
     // Waveform outputs
-    const float wav1 = voice1.output();
-    const float wav2 = voice2.output();
-    const float wav3 = voice3.output();
+    float wav1 = voice1.output();
+    float wav2 = voice2.output();
+    float wav3 = voice3.output();
 
     lastVoiceOut[0] = wav1;
     lastVoiceOut[1] = wav2;
     lastVoiceOut[2] = wav3;
 
     // Envelope outputs
-    const uint8_t env1 = voice1.envelope()->output();
-    const uint8_t env2 = voice2.envelope()->output();
-    const uint8_t env3 = voice3.envelope()->output();
+    uint8_t env1 = voice1.envelope()->output();
+    uint8_t env2 = voice2.envelope()->output();
+    uint8_t env3 = voice3.envelope()->output();
+
+    // ChipDeck patch: a muted voice is mixed in as a silent one.
+    if (chipdeckMute[0]) { wav1 = 0.f; env1 = 0; }
+    if (chipdeckMute[1]) { wav2 = 0.f; env2 = 0; }
+    if (chipdeckMute[2]) { wav3 = 0.f; env3 = 0; }
 
     // Voltage summer for filter input
     int32_t Vsum = 0;

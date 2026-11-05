@@ -138,7 +138,23 @@ bool TfmxTune::select(int subtune)
         names_.clear();
         for (int c = 0; c < channels_; ++c) names_.push_back(std::to_string(c + 1));
     }
+    setMute(mute_);
     return true;
+}
+
+void TfmxTune::setMute(uint32_t mask)
+{
+    mute_ = mask;
+    const int voices = std::max(0, tfmxdec_voices(dec_));
+    for (int c = 0; c < voices && c < 32; ++c)
+        tfmxdec_mute_voice(dec_, ((mask >> c) & 1u) != 0, static_cast<unsigned>(c));
+}
+
+void TfmxTune::seek(uint32_t ms)
+{
+    // The decoder restarts the song and runs the player without mixing.
+    tfmxdec_seek(dec_, static_cast<int32_t>(ms));
+    framesPlayed_ = uint64_t(ms) * rate_ / 1000u;
 }
 
 void TfmxTune::fillInfo(cd_info* out) const

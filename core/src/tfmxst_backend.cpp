@@ -1122,7 +1122,30 @@ bool TfmxStTune::start(int subtune)
     current_ = subtune;
     framesPlayed_ = 0;
     tickAcc_ = 0;
+    setMute(mute_);
     return true;
+}
+
+void TfmxStTune::setMute(uint32_t mask)
+{
+    mute_ = mask;
+    if (r_ && r_->ym) r_->ym->MuteVoices(mask & 7u);
+}
+
+void TfmxStTune::seek(uint32_t ms)
+{
+    const uint64_t target = uint64_t(ms) * rate_ / 1000u;
+    if (target < framesPlayed_) start(current_);
+    // Run only the 50 Hz replay ticks; register writes still reach the YM,
+    // which makes no sound meanwhile.
+    Replay& r = *r_;
+    while (framesPlayed_ < target)
+    {
+        const uint64_t step = std::min<uint64_t>(target - framesPlayed_, rate_);
+        tickAcc_ += step * kTickHz;
+        while (tickAcc_ >= rate_) { tickAcc_ -= rate_; r.irqin(); }
+        framesPlayed_ += step;
+    }
 }
 
 bool TfmxStTune::select(int subtune) { return start(subtune); }

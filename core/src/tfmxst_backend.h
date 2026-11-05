@@ -40,6 +40,11 @@ public:
     int channelCount() const { return 3; }
     const char* channelName(int ch) const;
     uint32_t positionMs() const;
+    // Mute channels: bit n mutes channel n (as numbered for the scopes).
+    // Kept when the subtune changes.
+    void setMute(uint32_t mask);
+    // Jump to `ms` from the start of the current subtune.
+    void seek(uint32_t ms);
 
     struct Replay;  // the ported replay routine (tfmxst_backend.cpp)
 
@@ -55,6 +60,7 @@ private:
     int current_ = 1;
     uint32_t rate_ = 0;
     uint64_t framesPlayed_ = 0;
+    uint32_t mute_ = 0;
     uint64_t tickAcc_ = 0;           // 50 Hz tick clock, in sample-rate units
     std::unique_ptr<Replay> r_;
 };

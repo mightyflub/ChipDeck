@@ -223,6 +223,8 @@ struct cd_player
     // Set when the loaded tune is Atari ST TFMX-ST.
     std::unique_ptr<chipdeck::TfmxStTune> tfmxst;
 
+    uint32_t mute = 0;         // cd_set_mute_mask(); cleared on load
+
     std::vector<short> chunk;  // engine output, interleaved stereo
     size_t chunkPos = 0;       // next unread int16 in chunk
     bool ready = false;
@@ -333,14 +335,25 @@ struct cd_player
         chunk.clear();
         chunkPos = 0;
         sidChannels();
+        applySidMute();
         error.clear();
         ready = true;
         return 0;
     }
 
+    // SID channels are 4 per chip: voices 1-3 and Digi (libsidplayfp's
+    // "samples" voice 3).
+    void applySidMute()
+    {
+        for (int ch = 0; ch < channels && ch < 32; ++ch)
+            engine.mute(static_cast<unsigned>(ch / 4), static_cast<unsigned>(ch % 4),
+                        ((mute >> ch) & 1u) != 0);
+    }
+
     // Clear whatever was loaded before (SID, Atari or module).
     void unload()
     {
+        mute = 0;
         tune.reset();
         atari.reset();
         mod.reset();
@@ -612,6 +625,7 @@ int cd_get_info(cd_player* p, cd_info* out)
     out->current_subtune = static_cast<int>(ti->currentSong());
     out->sid_chips = ti->sidChips();
     out->is_ntsc = ti->clockSpeed() == SidTuneInfo::CLOCK_NTSC ? 1 : 0;
+    out->basic_tune = ti->compatibility() == SidTuneInfo::COMPATIBILITY_BASIC ? 1 : 0;
     if (p->ready && p->engine.info().numberOfSIDs() > 0)
         out->sid_model = p->engine.info().sidModel(0) == SidTuneInfo::SIDMODEL_8580
                        ? CD_SID_8580 : CD_SID_6581;
@@ -699,6 +713,66 @@ size_t cd_render(cd_player* p, int16_t* out, size_t frames)
         done += take;
     }
     return done / 2;
+}
+
+void cd_set_mute_mask(cd_player* p, uint32_t mask)
+{
+    if (!p) return;
+    std::lock_guard<std::mutex> g(p->lock);
+    if (p->channels < 32) mask &= (1u << p->channels) - 1u;
+    p->mute = mask;
+    if (p->atari) p->atari->setMute(mask);
+    else if (p->mod) p->mod->setMute(mask);
+    else if (p->tfmx) p->tfmx->setMute(mask);
+    else if (p->tfmxst) p->tfmxst->setMute(mask);
+    else if (p->ready) p->applySidMute();
+}
+
+uint32_t cd_mute_mask(cd_player* p)
+{
+    if (!p) return 0;
+    std::lock_guard<std::mutex> g(p->lock);
+    return p->mute;
+}
+
+int cd_seek_ms(cd_player* p, uint32_t ms)
+{
+    if (!p) return 1;
+    std::lock_guard<std::mutex> g(p->lock);
+    try
+    {
+        if (p->atari) { p->atari->seek(ms); return 0; }
+        if (p->mod) { p->mod->seek(ms); return 0; }
+        if (p->tfmx) { p->tfmx->seek(ms); return 0; }
+        if (p->tfmxst) { p->tfmxst->seek(ms); return 0; }
+        if (!p->ready || !p->tune) return 1;
+        // Backwards: restart the subtune (mutes are kept by start()).
+        if (ms < p->engine.timeMs())
+        {
+            const int song = static_cast<int>(p->tune->getInfo()->currentSong());
+            if (p->start(song) != 0) return 1;
+        }
+        // Forwards: run the C64 without clocking the SID chips (ChipDeck
+        // patch in the reSIDfp builder). The tune's register writes still
+        // reach the chips, so they carry on from the right settings.
+        p->builder.skipClock(true);
+        int guard = 0;
+        while (p->engine.timeMs() < ms)
+        {
+            if (p->engine.play(kCyclesPerChunk * 4) < 0)
+            {
+                p->builder.skipClock(false);
+                p->fail(std::string("emulation error: ") + p->engine.error());
+                return 1;
+            }
+            if (++guard > 50000000) break;  // ~ 3 days of C64 time
+        }
+        p->builder.skipClock(false);
+        p->chunk.clear();
+        p->chunkPos = 0;
+        return 0;
+    }
+    catch (const std::exception& e) { return p->fail(e.what()); }
 }
 
 uint32_t cd_position_ms(cd_player* p)
@@ -803,6 +877,7 @@ int cd_probe_file(const char* path, const char* songlengths_path, cd_info* out)
                        : ti->sidModel(0) == SidTuneInfo::SIDMODEL_6581 ? CD_SID_6581
                        : CD_SID_AUTO;
         out->is_ntsc = ti->clockSpeed() == SidTuneInfo::CLOCK_NTSC ? 1 : 0;
+    out->basic_tune = ti->compatibility() == SidTuneInfo::COMPATIBILITY_BASIC ? 1 : 0;
         if (songlengths_path && *songlengths_path)
         {
             std::lock_guard<std::mutex> g(probeDbLock);

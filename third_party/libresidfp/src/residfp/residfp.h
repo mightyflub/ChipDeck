@@ -179,6 +179,9 @@ public:
      */
     void setVoiceTap(short* tap);
 
+    /** ChipDeck patch: mute voice 0..2 at once (see SID::muteVoice). */
+    void muteVoice(int voice, bool mute);
+
     /**
      * Clock SID forward producing audio
      * using chosen output resampling algorithm.

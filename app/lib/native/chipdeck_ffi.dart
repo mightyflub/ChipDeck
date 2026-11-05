@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -33,6 +34,8 @@ final class CdInfoStruct extends Struct {
   external int lengthMs;
   @Int32()
   external int system;
+  @Int32()
+  external int basicTune;
 }
 
 /// SID model values (cd_sid_model).
@@ -67,6 +70,9 @@ class TuneInfo {
   final int? lengthMs;
   final TuneSystem system;
 
+  /// A C64 BASIC program: plays only with the real BASIC ROM.
+  final bool basicTune;
+
   bool get isSid => system == TuneSystem.c64;
 
   const TuneInfo({
@@ -82,6 +88,7 @@ class TuneInfo {
     required this.isNtsc,
     required this.lengthMs,
     required this.system,
+    this.basicTune = false,
   });
 
   static String _str(Array<Uint8> a) {
@@ -112,6 +119,7 @@ class TuneInfo {
     isNtsc: s.isNtsc != 0,
     lengthMs: s.lengthMs > 0 ? s.lengthMs : null,
     system: TuneSystem.fromIndex(s.system),
+    basicTune: s.basicTune != 0,
   );
 }
 
@@ -208,6 +216,31 @@ class ChipDeckNative {
             Size Function(Pointer<Void>, Pointer<Int16>, Size),
             int Function(Pointer<Void>, Pointer<Int16>, int)
           >('cd_channel_scope'),
+      _seek = lib
+          .lookupFunction<
+            Int32 Function(Pointer<Void>, Uint32),
+            int Function(Pointer<Void>, int)
+          >('cd_seek_ms'),
+      _setMute = lib
+          .lookupFunction<
+            Void Function(Pointer<Void>, Uint32),
+            void Function(Pointer<Void>, int)
+          >('cd_set_mute_mask'),
+      _setRoms = lib
+          .lookupFunction<
+            Int32 Function(
+              Pointer<Void>,
+              Pointer<Utf8>,
+              Pointer<Utf8>,
+              Pointer<Utf8>,
+            ),
+            int Function(
+              Pointer<Void>,
+              Pointer<Utf8>,
+              Pointer<Utf8>,
+              Pointer<Utf8>,
+            )
+          >('cd_set_roms'),
       _probe = lib
           .lookupFunction<
             Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<CdInfoStruct>),
@@ -234,6 +267,15 @@ class ChipDeckNative {
   final int Function(Pointer<Void>, Pointer<Int16>, int) _channelScope;
   final int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<CdInfoStruct>)
   _probe;
+  final int Function(Pointer<Void>, int) _seek;
+  final void Function(Pointer<Void>, int) _setMute;
+  final int Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>)
+  _setRoms;
+
+  /// Seeks a player from a background isolate (a long SID jump can take a
+  /// second or two). [player] is the player's address.
+  static int _seekIn(int player, int ms) =>
+      open()._seek(Pointer<Void>.fromAddress(player), ms);
 
   static ChipDeckNative? _instance;
 
@@ -317,6 +359,27 @@ class ChipDeckEngine {
       : null;
 
   int get positionMs => _n._positionMs(_player);
+
+  /// Jumps to [ms] in the current subtune, in a background isolate so the
+  /// UI keeps going. Returns false on error.
+  Future<bool> seek(int ms) async {
+    final addr = _player.address;
+    final target = ms < 0 ? 0 : ms;
+    final r = await Isolate.run(() => ChipDeckNative._seekIn(addr, target));
+    return r == 0;
+  }
+
+  /// Muted channels: bit n mutes channel n of [channelNames]. Cleared by
+  /// the core when a tune loads; kept across subtunes.
+  set muteMask(int mask) => _n._setMute(_player, mask & 0xFFFFFFFF);
+
+  /// C64 KERNAL, BASIC and character ROMs (any may be null). Applies from
+  /// the next load. Returns false (see [lastError]) if a file is wrong.
+  bool setRoms({String? kernal, String? basic, String? chargen}) => using((a) {
+    Pointer<Utf8> s(String? v) =>
+        v == null || v.isEmpty ? nullptr : v.toNativeUtf8(allocator: a);
+    return _n._setRoms(_player, s(kernal), s(basic), s(chargen)) == 0;
+  });
 
   /// Latest output samples, newest last, for an oscilloscope.
   Int16List scope(int frames) {

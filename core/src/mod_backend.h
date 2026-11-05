@@ -44,6 +44,11 @@ public:
     int channelCount() const { return channels_; }
     const char* channelName(int ch) const;
     uint32_t positionMs() const;
+    // Mute channels: bit n mutes channel n (as numbered for the scopes).
+    // Kept when the subtune changes.
+    void setMute(uint32_t mask);
+    // Jump to `ms` from the start of the current subtune.
+    void seek(uint32_t ms);
 
 private:
     ModTune() = default;
@@ -53,6 +58,7 @@ private:
     int current_ = 1;
     int channels_ = 0;
     uint64_t framesPlayed_ = 0;
+    uint32_t mute_ = 0;
     // One libxmp tick of output not yet handed out.
     std::vector<int16_t> tick_;      // interleaved stereo
     std::vector<int16_t> tickChans_; // channels_ values per frame

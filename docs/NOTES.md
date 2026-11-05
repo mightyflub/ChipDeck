@@ -751,3 +751,34 @@ render-forward seeking; libxmp already plays S3M/IT/MED etc. New libraries
 proposed (all GPL-2-compatible): libFLAC (BSD-3), HivelyTracker replayer
 (BSD-3), ASAP (GPL-2+), Dart `archive` (MIT), maybe the LZMA SDK (public
 domain).
+
+## 2026-11-05: Mute/solo, seeking and C64 ROMs (0.12.0)
+
+The owner asked for roadmap items 1-3 in one build, then 4-6 in the next.
+
+- **Mute.** libsidplayfp's own `mute()` masks register writes (gate bit,
+  volume nibble), so a held note keeps sounding until the tune writes
+  the register again, and unmuting waits for the next note. Patched
+  reSIDfp's filter mixer instead (`chipdeckMute`): a muted voice is mixed
+  as a silent one at once, but `lastVoiceOut` still feeds its scope, so
+  muted scopes keep moving (dimmed in the app). Digi ($D418) still uses
+  the masking (it forces the volume nibble to 15 on writes).
+- **Seek.** Rendering a SID at full quality runs ~9x real time here
+  (`chipdeck-cli -w` of 180 s took 21 s; the resampler is not the cost,
+  INTERPOLATE was 19 s), far too slow. With the chips not clocked
+  (`skipClock`), the 6510/CIA/VIC emulation alone runs ~75x. The tune's
+  register writes still reach the chips, so filter/volume/waveform
+  settings are right afterwards; envelopes and oscillators carry on from
+  where they stopped, which is heard at most until the next note. Tunes
+  that read OSC3/ENV3 (random numbers) may take a different path after a
+  jump. AtariAudio has `FastForward` (~80x). libxmp's `xmp_seek_time`
+  jumps to a pattern start (times count from the start of the current
+  sequence; checked in scan.c), the rest is rendered; if the module jumps
+  back (loops), it falls back to rendering from the start.
+- **ROMs.** `cd_set_roms` existed since 0.1; BASIC tunes without the BASIC
+  ROM load but stay silent (no error), so `cd_info.basic_tune` tells the
+  app to say so.
+
+Checked: ctest (5 suites, new `mute_seek`), `flutter analyze`, `flutter
+test`, Linux release build under Xvfb (mute by click, solo by right-click,
+"Unmute all", seek by click and Shift+Right while playing, Settings).

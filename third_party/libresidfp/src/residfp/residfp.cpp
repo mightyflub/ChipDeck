@@ -120,6 +120,11 @@ void residfp::setVoiceTap(short* tap)
     sid.setVoiceTap(tap);
 }
 
+void residfp::muteVoice(int voice, bool mute)
+{
+    sid.muteVoice(voice, mute);
+}
+
 int residfp::clock( short* buf, int bufSize)
 {
     return sid.clock(buf, bufSize);
