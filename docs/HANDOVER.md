@@ -590,6 +590,12 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
+The plan for the next releases (0.12.0 to 0.25.0: mute/solo, seeking,
+C64 ROMs, play history, media keys, more formats, archive downloads,
+sound options, crossfade, export, AHX/HVL, SAP) is in
+[ROADMAP.md](ROADMAP.md). Pick up the first release there that is not
+done yet.
+
 0000. Favourites and playlists (0.11.0): Stephen tries the Windows build:
    star tunes (library, Now playing, F key), make/rename/delete playlists,
    add from library rows and folders, reorder by dragging, play from a list

@@ -738,3 +738,16 @@ for every platform on the front page, saying which are tested.
   status, and build steps for Windows (CLI, app), Android, Linux (CLI,
   app), MinGW cross-compile, macOS CLI (untested, no Mac), and a note that
   macOS/iOS apps would need new Flutter runners.
+
+## 2026-11-05: Roadmap for 0.12.0 onwards
+
+The owner asked for a plan covering nine feature ideas, split into small
+releases that are easy to test. Written to [ROADMAP.md](ROADMAP.md).
+Findings while checking the code: Songlengths, the SID model setting,
+Android background/lock-screen controls and Future Composer already exist;
+the core already has `cd_set_roms()`; every bundled engine can mute single
+voices; libxmp and libtfmxaudiodecoder can seek, the others need
+render-forward seeking; libxmp already plays S3M/IT/MED etc. New libraries
+proposed (all GPL-2-compatible): libFLAC (BSD-3), HivelyTracker replayer
+(BSD-3), ASAP (GPL-2+), Dart `archive` (MIT), maybe the LZMA SDK (public
+domain).
