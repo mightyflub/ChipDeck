@@ -1124,8 +1124,10 @@ class _LocationsDialog extends StatelessWidget {
                   subtitle: Text(
                     library.scanningRoots.contains(r)
                         ? 'Refreshing…'
+                        : library.queuedRoots.contains(r)
+                        ? 'Waiting to refresh…'
                         : '${library.folder(r)?.totalTracks ?? 0} tunes'
-                              '${library.rootScans[r] == null ? '' : ' · refreshed ${_fmt(library.rootScans[r]!)}'}'
+                              '${library.rootScans[r] == null ? ' · not refreshed yet' : ' · refreshed ${_fmt(library.rootScans[r]!)}'}'
                               '${_issuesIn(library, r)}',
                     style: const TextStyle(color: Palette.textMuted),
                   ),

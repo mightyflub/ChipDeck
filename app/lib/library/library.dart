@@ -352,6 +352,10 @@ class LibraryController extends ChangeNotifier {
 
   _ScanRun? _run;
 
+  /// Locations waiting for the running refresh to finish.
+  final List<String> queuedRoots = [];
+  bool _queuedFull = false;
+
   /// Called when a location contains an HVSC Songlengths.md5 file.
   void Function(String path)? onSonglengthsFound;
   String? Function()? songlengthsPath;
@@ -453,6 +457,7 @@ class LibraryController extends ChangeNotifier {
   Future<void> removeRoot(String dir) async {
     roots.remove(dir);
     rootScans.remove(dir);
+    queuedRoots.remove(dir);
     scanIssues = [
       for (final i in scanIssues)
         if (!p.isWithin(dir, i.path) && !p.equals(dir, i.path)) i,
@@ -492,7 +497,19 @@ class LibraryController extends ChangeNotifier {
       for (final r in only ?? roots)
         if (roots.contains(r)) r,
     ];
-    if (isScanning || targets.isEmpty) return;
+    if (targets.isEmpty) return;
+    if (isScanning) {
+      // A location added (or a refresh asked for) while another refresh
+      // runs is queued and refreshed right after it.
+      for (final t in targets) {
+        if (!scanningRoots.contains(t) && !queuedRoots.contains(t)) {
+          queuedRoots.add(t);
+        }
+      }
+      _queuedFull |= full;
+      notifyListeners();
+      return;
+    }
     final run = _ScanRun();
     _run = run;
     scanningRoots = targets;
@@ -606,6 +623,17 @@ class LibraryController extends ChangeNotifier {
       notifyListeners();
       if (!run.cancelled) await _save();
     }
+    if (queuedRoots.isNotEmpty) {
+      final next = [...queuedRoots];
+      final nextFull = _queuedFull;
+      queuedRoots.clear();
+      _queuedFull = false;
+      if (run.cancelled) {
+        notifyListeners();
+      } else {
+        await rescan(full: nextFull, only: next);
+      }
+    }
   }
 
   /// Stops the running refresh. The library keeps what it had before.
@@ -613,6 +641,8 @@ class LibraryController extends ChangeNotifier {
     final run = _run;
     if (run == null || run.cancelled) return;
     run.cancel();
+    queuedRoots.clear();
+    _queuedFull = false;
     scan = ScanProgress(0, 0, 'Cancelling…');
     notifyListeners();
   }

@@ -621,3 +621,27 @@ and the filter button made no difference. Fix: the Semantics container
 (cheapest, keeps the layout). Exact framework trigger not found; a
 widget-test check for semantics nodes changing parent saw none, so it
 is probably an engine bookkeeping bug that this tree shape avoids.
+
+### Library refresh getting stuck (2026-11-05, 0.10.1)
+
+Stephen: the 0.10.0 build "got stuck" scanning new locations and showed
+no error. He had added X:\Roms-Mister\Music\Protracker, \Fasttracker2
+and \RealSID; when the refresh finished, Protracker and RealSID showed
+no tunes. He then spotted the cause himself: locations added while a
+refresh is running are never scanned (`rescan()` returned at once when
+`isScanning`), while the progress total grew. Fixed by queueing them.
+
+While looking, the scanner had other ways to fail silently, fixed in the
+same change:
+- `Directory.listSync(recursive: true)` throws on the first sub-folder it
+  cannot open, and the whole location was then treated as unreadable (0
+  tunes, no message). Now each folder is listed on its own.
+- A native tune-info call that never returns stalled the refresh forever.
+  Dart cannot interrupt a thread inside FFI code, so the main isolate
+  watches for 20 s without a result, abandons that worker (its thread
+  stays stuck until the app closes, hence the cap of 5 per refresh) and
+  starts a new one after the bad file.
+- Files no player recognised were dropped without a word. Every skipped
+  file or folder is now in the scan report with a reason.
+- Progress only updated every 250 files, so a slow drive looked hung.
+  Now it updates every 150 ms and names a file that takes over 3 s.

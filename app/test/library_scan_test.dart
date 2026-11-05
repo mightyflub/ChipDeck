@@ -93,4 +93,24 @@ void main() {
     expect(lib.tracks.length, 7);
     expect(lib.message, contains('Could not open'));
   }, skip: haveNative ? false : 'libchipdeck.so not found');
+
+  test('a location added during a refresh is refreshed after it', () async {
+    final a = p.join(tmp.path, 'A');
+    final b = p.join(tmp.path, 'B');
+    copyTestTunes(a);
+    copyTestTunes(b);
+    final lib = LibraryController.forIndex(
+      File(p.join(tmp.path, 'library.json')),
+    );
+    final first = lib.addRoot(a);
+    expect(lib.isScanning, isTrue);
+    await lib.addRoot(b); // returns at once: queued
+    expect(lib.queuedRoots, [b]);
+    await first; // runs A, then the queued B
+    expect(lib.isScanning, isFalse);
+    expect(lib.queuedRoots, isEmpty);
+    expect(lib.folder(a)?.totalTracks, 7);
+    expect(lib.folder(b)?.totalTracks, 7);
+    expect(lib.rootScans.keys, containsAll([a, b]));
+  }, skip: haveNative ? false : 'libchipdeck.so not found');
 }
