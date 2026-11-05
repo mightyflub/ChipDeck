@@ -89,6 +89,28 @@ and the version is given whenever a build is shared.
   accessibility crash, see NOTES.md). Same code on Windows and Android.
   Also fixed: next/previous were disabled when playing from the library
   with an empty playlist.
+- **Library refresh hardening (0.10.1, branch claude/project-thread-dq5ked):**
+  Stephen added three music locations (Protracker, Fasttracker2, RealSID)
+  while a refresh was running; two of them never got scanned and the app
+  showed nothing about it. Fixed: a location added (or a refresh asked
+  for) during a refresh is queued and refreshed straight after it
+  (Music locations shows "Waiting to refresh…", and "not refreshed yet"
+  for a location that never was). Also: folders are listed one at a time,
+  so an unreadable sub-folder is skipped and reported instead of the whole
+  location silently giving 0 tunes; each file's tune info gets 20 s
+  (`probeTimeout`), after which the worker isolate is abandoned and a new
+  one carries on with the next file; a hung file is remembered (size +
+  mtime) and skipped until it changes or "Rebuild index"; after 5 hung
+  files a refresh stops reading new files. Every refresh ends with a
+  message, plus "Details" (scan report: file, reason, path, Copy list)
+  when anything was skipped; the report is also under Music locations >
+  Scan report and saved as `issues` in library.json. The scan bar has a
+  cancel button and shows "Still reading <file>…" after 3 s on one file.
+  `chipdeck-cli --scan DIR` reads every tune below DIR the way the app
+  does, printing each file before reading it (finds hangs and slow
+  files). Same Dart code on Windows and Android. Tests:
+  `app/test/library_scan_test.dart` (needs libchipdeck.so, see there; a
+  named pipe stands in for a file that hangs).
 - **Playlist and library refresh (0.10.0, branch claude/project-thread-x9dijm):**
   playing a tune from the Library no longer adds it to the playlist. Tap a
   tune, "Play all" or a folder's play button: it plays straight from the
@@ -296,6 +318,7 @@ docs/                     HANDOVER.md (this), NOTES.md (log)
 | Android file access | "All files access" + SAF pickers mapped to paths | Library/index code identical to Windows; fast on HVSC. Not Play Store friendly (see NOTES.md) |
 | Android background audio | Foreground service + MediaSessionCompat (androidx.media) | Survives screen off; lock screen and headset controls |
 | Android signing | Key from repo secrets in CI, debug key otherwise | Committing a key was refused as a credential leak |
+| Public repo | Workflow token is read-only; no secrets, ROMs or real tunes in git | Checked 2026-11-05 before going public; keep it that way (see NOTES.md) |
 
 ## How to build and run
 
@@ -338,7 +361,10 @@ Library (added 2026-11-04 at Stephen's request): saved music locations
 Refreshes are incremental (size + mtime) and never automatic at startup
 (since 0.10.0): the refresh menu refreshes all locations or one, as do the
 per-location buttons in Music locations; adding a location reads only that
-one; "Rebuild index" in Music locations re-reads everything.
+one; "Rebuild index" in Music locations re-reads everything. Since 0.10.1
+a refresh asked for while one runs is queued, files and folders that
+cannot be read are skipped and listed in the scan report (`issues` in
+library.json), and one file may take at most 20 s.
 `LibraryController.rescan(only: [...])` keeps tunes in other locations
 untouched; per-location times are saved as `rootScans` in library.json. Folder
 browser with breadcrumbs and per-folder tune counts, play/add a whole
@@ -471,6 +497,9 @@ chipdeck-cli -s 2 tune.sndh           SNDH subtune 2
 chipdeck-cli tune.ym                  Atari ST YM (packed or not)
 chipdeck-cli tune.mod                 Amiga module (-s picks a hidden subsong)
 chipdeck-cli tune.xm                  Fasttracker 2 module
+chipdeck-cli --scan D:\Music          read every tune below a folder as the
+                                      library does; prints each file first,
+                                      marks FAILED and SLOW (>1 s) ones
 keys: n/p next/prev subtune, space pause, q quit
 ```
 
@@ -519,6 +548,9 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
    shown list and position come back). Then the APK on the Ayn Thor.
    Possible follow-ups: star on the second-screen controls, import/export
    playlists as .m3u, a "starred" mark or filter in the library.
+0000. Library refresh (0.10.1): Stephen refreshes the new music
+   locations (Protracker, Fasttracker2, RealSID) and checks the scan
+   report; then adds a location during a refresh (it should queue).
 000. Playlist/library refresh (0.10.0): Stephen tries the Windows build:
    play from the library (playlist must stay unchanged, next/previous walk
    the folder or results), restart (no scan), refresh one location and all.

@@ -15,6 +15,11 @@ on:
         type: boolean
         default: false
 
+# The repo is public: the workflow token can only read the repo. Signing
+# secrets are never passed to pull requests from forks.
+permissions:
+  contents: read
+
 jobs:
   windows:
     runs-on: windows-latest

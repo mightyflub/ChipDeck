@@ -263,11 +263,67 @@ class FormatFilter {
 }
 
 class ScanProgress {
-  const ScanProgress(this.done, this.total, this.phase);
+  const ScanProgress(this.done, this.total, this.phase, {this.slowFile});
   final int done;
   final int total;
   final String phase;
+
+  /// The file being read, when reading it has taken more than a few seconds.
+  final String? slowFile;
 }
+
+/// Why a file or folder was left out of the last refresh.
+enum ScanIssueKind {
+  folder, // a folder could not be opened
+  unreadable, // a file could not be read from the disk
+  notATune, // read, but no player recognised it
+  timedOut, // reading its tune info did not finish
+  crashed; // reading it stopped the scanner
+
+  String get label => switch (this) {
+    folder => 'Folder could not be opened',
+    unreadable => 'File could not be read',
+    notATune => 'Not recognised as a tune',
+    timedOut => 'Took too long to read',
+    crashed => 'Stopped the scanner',
+  };
+
+  static ScanIssueKind fromIndex(int i) =>
+      i >= 0 && i < values.length ? values[i] : notATune;
+}
+
+class ScanIssue {
+  const ScanIssue(
+    this.path,
+    this.kind,
+    this.detail, {
+    this.size = -1,
+    this.mtime = -1,
+  });
+  final String path;
+  final ScanIssueKind kind;
+  final String detail;
+  final int size; // of a file that timed out, so it is skipped until it changes
+  final int mtime;
+
+  List<Object> toJson() => [path, kind.index, detail, size, mtime];
+
+  static ScanIssue fromJson(List<dynamic> j) => ScanIssue(
+    j[0] as String,
+    ScanIssueKind.fromIndex(j[1] as int),
+    j[2] as String,
+    size: j.length > 3 ? j[3] as int : -1,
+    mtime: j.length > 4 ? j[4] as int : -1,
+  );
+}
+
+/// How long reading one file's tune info may take before the scan gives up
+/// on it and moves on.
+Duration probeTimeout = const Duration(seconds: 20);
+
+/// After this many files that hang, a refresh stops reading new files (each
+/// one leaves a stuck background thread until the app is closed).
+const maxHungFiles = 5;
 
 class LibraryController extends ChangeNotifier {
   LibraryController._(this._file);
@@ -286,6 +342,20 @@ class LibraryController extends ChangeNotifier {
   List<String> scanningRoots = const [];
   String? message;
 
+  /// Files and folders the refreshes left out, with the reason. Only the
+  /// latest refresh of each location counts.
+  List<ScanIssue> scanIssues = [];
+
+  /// Set with [message] when the refresh that wrote it had problems, so the
+  /// app can offer the scan report.
+  bool messageHasIssues = false;
+
+  _ScanRun? _run;
+
+  /// Locations waiting for the running refresh to finish.
+  final List<String> queuedRoots = [];
+  bool _queuedFull = false;
+
   /// Called when a location contains an HVSC Songlengths.md5 file.
   void Function(String path)? onSonglengthsFound;
   String? Function()? songlengthsPath;
@@ -293,6 +363,12 @@ class LibraryController extends ChangeNotifier {
   /// Called when a location contains HVSC STIL.txt (tune information).
   void Function(String path)? onStilFound;
   String? Function()? stilPath;
+
+  @visibleForTesting
+  static LibraryController forIndex(File file) => LibraryController._(file);
+
+  @visibleForTesting
+  Future<void> reload() => _load();
 
   static Future<LibraryController> create() async {
     final dir = await getApplicationSupportDirectory();
@@ -327,6 +403,10 @@ class LibraryController extends ChangeNotifier {
           }
         }
       }
+      final is_ = data['issues'];
+      if (is_ is List) {
+        scanIssues = [for (final i in is_) ScanIssue.fromJson(i as List)];
+      }
       _rebuildFolders();
     } catch (e) {
       debugPrint('library load failed: $e');
@@ -343,6 +423,7 @@ class LibraryController extends ChangeNotifier {
           e.key: e.value.millisecondsSinceEpoch,
       },
       'tracks': [for (final t in tracks) t.toJson()],
+      'issues': [for (final i in scanIssues) i.toJson()],
     });
     await _file.parent.create(recursive: true);
     final tmp = File('${_file.path}.tmp');
@@ -376,6 +457,11 @@ class LibraryController extends ChangeNotifier {
   Future<void> removeRoot(String dir) async {
     roots.remove(dir);
     rootScans.remove(dir);
+    queuedRoots.remove(dir);
+    scanIssues = [
+      for (final i in scanIssues)
+        if (!p.isWithin(dir, i.path) && !p.equals(dir, i.path)) i,
+    ];
     tracks = tracks.where((t) => !p.isWithin(dir, t.path)).toList();
     _rebuildFolders();
     notifyListeners();
@@ -411,81 +497,327 @@ class LibraryController extends ChangeNotifier {
       for (final r in only ?? roots)
         if (roots.contains(r)) r,
     ];
-    if (isScanning || targets.isEmpty) return;
+    if (targets.isEmpty) return;
+    if (isScanning) {
+      // A location added (or a refresh asked for) while another refresh
+      // runs is queued and refreshed right after it.
+      for (final t in targets) {
+        if (!scanningRoots.contains(t) && !queuedRoots.contains(t)) {
+          queuedRoots.add(t);
+        }
+      }
+      _queuedFull |= full;
+      notifyListeners();
+      return;
+    }
+    final run = _ScanRun();
+    _run = run;
     scanningRoots = targets;
-    scan = ScanProgress(
-      0,
-      0,
-      targets.length == 1 && roots.length > 1
-          ? 'Looking for tunes in ${p.basename(targets.first)}…'
-          : 'Looking for tunes…',
-    );
+    final where = targets.length == 1 && roots.length > 1
+        ? ' in ${p.basename(targets.first)}'
+        : '';
+    scan = ScanProgress(0, 0, 'Looking for tunes$where…');
     notifyListeners();
 
-    bool inTargets(String path) => targets.any((r) => p.isWithin(r, path));
+    bool inTargets(String path) =>
+        targets.any((r) => p.isWithin(r, path) || p.equals(r, path));
     final known = <String, List<Object>>{
       for (final t in tracks)
         if (inTargets(t.path)) t.path: t.toJson(),
     };
-    final port = ReceivePort();
-    final args = _ScanArgs(
-      port.sendPort,
-      targets,
-      known,
-      full,
-      songlengthsPath?.call(),
-    );
-    await Isolate.spawn(
-      _scanWorker,
-      args,
-      errorsAreFatal: true,
+    // Files that hung last time are skipped until they change (a rebuild
+    // tries them again).
+    final hung = <String, List<int>>{
+      if (!full)
+        for (final i in scanIssues)
+          if (i.kind == ScanIssueKind.timedOut && inTargets(i.path))
+            i.path: [i.size, i.mtime],
+    };
+
+    try {
+      // 1. Find the files.
+      final listed = await _listFiles(run, targets, where);
+      if (run.cancelled || listed == null) {
+        message = 'Refresh cancelled; the library was not changed.';
+        messageHasIssues = false;
+        return;
+      }
+      // 2. Read their tune info, a file at a time, with a time limit each.
+      final result = await _probeFiles(run, listed.files, known, hung, full);
+      if (run.cancelled) {
+        message = 'Refresh cancelled; the library was not changed.';
+        messageHasIssues = false;
+        return;
+      }
+
+      final issues = [...listed.issues, ...result.issues];
+      // Keep the old entries of locations and folders that could not be
+      // read (offline drive, SD card removed, permission revoked), and of
+      // files never reached because too many files hung.
+      final keepUnder = [...listed.unreadableRoots, ...listed.badDirs];
+      final seen = {...listed.files};
+      final kept = <List<Object>>[];
+      for (final e in known.entries) {
+        final under = keepUnder.any((d) => p.isWithin(d, e.key));
+        if ((!seen.contains(e.key) && under) ||
+            result.notReached.contains(e.key)) {
+          kept.add(e.value);
+        }
+      }
+      final fresh = [
+        for (final t in [...result.tracks, ...kept]) LibraryTrack.fromJson(t),
+      ];
+      tracks = [
+        for (final t in tracks)
+          if (!inTargets(t.path)) t,
+        ...fresh,
+      ];
+      scanIssues = [
+        for (final i in scanIssues)
+          if (!inTargets(i.path)) i,
+        ...issues,
+      ];
+      final now = DateTime.now();
+      lastScan = now;
+      for (final r in targets) {
+        if (!listed.unreadableRoots.contains(r)) rootScans[r] = now;
+      }
+      _rebuildFolders();
+      final what = targets.length == 1 && roots.length > 1
+          ? p.basename(targets.first)
+          : 'Library';
+      final count = targets.length == roots.length
+          ? tracks.length
+          : fresh.length;
+      final added = result.changed;
+      final parts = <String>[
+        added > 0
+            ? '$what updated: $count tunes ($added new or changed).'
+            : '$what is up to date: $count tunes.',
+      ];
+      if (listed.unreadableRoots.isNotEmpty) {
+        parts.add(
+          listed.unreadableRoots.length == 1
+              ? 'Could not open ${listed.unreadableRoots.first}.'
+              : 'Could not open ${listed.unreadableRoots.length} locations.',
+        );
+      }
+      if (result.gaveUp) {
+        parts.add('Stopped reading new files after $maxHungFiles hung.');
+      }
+      if (issues.isNotEmpty) {
+        parts.add(
+          '${issues.length} ${issues.length == 1 ? 'file or folder was' : 'files or folders were'} skipped.',
+        );
+      }
+      message = parts.join(' ');
+      messageHasIssues = issues.isNotEmpty;
+    } catch (e) {
+      message = 'Refresh failed: $e';
+      messageHasIssues = false;
+    } finally {
+      run.dispose();
+      _run = null;
+      scan = null;
+      scanningRoots = const [];
+      notifyListeners();
+      if (!run.cancelled) await _save();
+    }
+    if (queuedRoots.isNotEmpty) {
+      final next = [...queuedRoots];
+      final nextFull = _queuedFull;
+      queuedRoots.clear();
+      _queuedFull = false;
+      if (run.cancelled) {
+        notifyListeners();
+      } else {
+        await rescan(full: nextFull, only: next);
+      }
+    }
+  }
+
+  /// Stops the running refresh. The library keeps what it had before.
+  void cancelScan() {
+    final run = _run;
+    if (run == null || run.cancelled) return;
+    run.cancel();
+    queuedRoots.clear();
+    _queuedFull = false;
+    scan = ScanProgress(0, 0, 'Cancelling…');
+    notifyListeners();
+  }
+
+  Future<_Listed?> _listFiles(
+    _ScanRun run,
+    List<String> targets,
+    String where,
+  ) async {
+    final port = run.newPort();
+    final isolate = await Isolate.spawn(
+      _listWorker,
+      _ListArgs(port.sendPort, targets),
+      onExit: port.sendPort,
       onError: port.sendPort,
     );
-
-    final done = Completer<void>();
+    run.isolate = isolate;
+    final out = Completer<_Listed?>();
+    run.onCancel = () {
+      if (!out.isCompleted) out.complete(null);
+    };
+    var lastUi = DateTime.now();
     port.listen((msg) {
-      if (msg is List && msg.isNotEmpty && msg[0] == 'progress') {
-        scan = ScanProgress(msg[1] as int, msg[2] as int, 'Indexing');
-        notifyListeners();
-      } else if (msg is List && msg.isNotEmpty && msg[0] == 'done') {
-        final fresh = [
-          for (final t in msg[1] as List) LibraryTrack.fromJson(t as List),
-        ];
-        tracks = [
-          for (final t in tracks)
-            if (!inTargets(t.path)) t,
-          ...fresh,
-        ];
-        final added = msg[2] as int;
+      if (out.isCompleted) return;
+      if (msg is List && msg.isNotEmpty && msg[0] == 'dir') {
         final now = DateTime.now();
-        lastScan = now;
-        for (final r in targets) {
-          rootScans[r] = now;
-        }
-        _rebuildFolders();
-        final what = targets.length == 1 && roots.length > 1
-            ? p.basename(targets.first)
-            : 'Library';
-        final count = targets.length == roots.length
-            ? tracks.length
-            : fresh.length;
-        message = added > 0
-            ? '$what updated: $count tunes ($added new or changed).'
-            : '$what is up to date: $count tunes.';
-        port.close();
-        done.complete();
-      } else if (msg is List) {
-        // Error from the isolate: [error, stack]
-        message = 'Indexing failed: ${msg.first}';
-        port.close();
-        if (!done.isCompleted) done.complete();
+        if (now.difference(lastUi).inMilliseconds < 150) return;
+        lastUi = now;
+        scan = ScanProgress(
+          0,
+          0,
+          'Looking for tunes$where… ${msg[2]} found in ${msg[1]} folders',
+        );
+        notifyListeners();
+      } else if (msg is List && msg.isNotEmpty && msg[0] == 'listed') {
+        out.complete(
+          _Listed(
+            (msg[1] as List).cast<String>(),
+            (msg[2] as List).cast<String>(),
+            [
+              for (final b in msg[3] as List)
+                ScanIssue(
+                  (b as List)[0] as String,
+                  ScanIssueKind.folder,
+                  b[1] as String,
+                ),
+            ],
+          ),
+        );
+      } else {
+        // An error ([error, stack]) or the isolate exiting without a result.
+        out.completeError(
+          msg is List && msg.isNotEmpty
+              ? 'could not list the folders (${msg.first})'
+              : 'could not list the folders',
+        );
       }
     });
-    await done.future;
-    scan = null;
-    scanningRoots = const [];
+    return out.future;
+  }
+
+  Future<_Probed> _probeFiles(
+    _ScanRun run,
+    List<String> files,
+    Map<String, List<Object>> known,
+    Map<String, List<int>> hung,
+    bool full,
+  ) async {
+    final result = _Probed();
+    final songlengths = songlengthsPath?.call();
+    var next = 0; // index of the first file without a result
+    var hungFiles = 0;
+    scan = ScanProgress(0, files.length, 'Indexing');
     notifyListeners();
-    await _save();
+
+    while (next < files.length && !run.cancelled) {
+      // One worker reads files from [next] on. If a file hangs, the worker
+      // is abandoned and a new one carries on after that file.
+      final port = run.newPort();
+      final done = Completer<String>(); // why the worker stopped
+      var lastMsg = DateTime.now();
+      var lastUi = DateTime.now();
+      port.listen((msg) {
+        if (done.isCompleted) return;
+        lastMsg = DateTime.now();
+        if (msg is List && msg.isNotEmpty && msg[0] == 'r') {
+          final i = msg[1] as int;
+          final track = msg[2];
+          if (track is List) {
+            result.tracks.add(track.cast<Object>());
+          } else if (msg[3] is List) {
+            result.issues.add(ScanIssue.fromJson(msg[3] as List));
+          }
+          if (msg[4] == true) result.changed++;
+          next = i + 1;
+          final now = DateTime.now();
+          if (now.difference(lastUi).inMilliseconds >= 150 ||
+              next == files.length) {
+            lastUi = now;
+            scan = ScanProgress(next, files.length, 'Indexing');
+            notifyListeners();
+          }
+        } else if (msg is List && msg.isNotEmpty && msg[0] == 'end') {
+          done.complete('end');
+        } else if (msg == null) {
+          done.complete('exit'); // onExit without 'end': it died
+        } else if (msg is List) {
+          done.complete('error: ${msg.first}');
+        }
+      });
+      run.isolate = await Isolate.spawn(
+        _probeWorker,
+        _ProbeArgs(port.sendPort, files, next, known, hung, full, songlengths),
+        onExit: port.sendPort,
+        onError: port.sendPort,
+      );
+      run.onCancel = () {
+        if (!done.isCompleted) done.complete('cancel');
+      };
+      // Watchdog: notice a file that takes too long, and show which file it
+      // is after a few seconds so a slow drive is not mistaken for a hang.
+      final timer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+        if (done.isCompleted || next >= files.length) return;
+        final quiet = DateTime.now().difference(lastMsg);
+        if (quiet >= probeTimeout) {
+          done.complete('timeout');
+        } else if (quiet >= const Duration(seconds: 3)) {
+          scan = ScanProgress(
+            next,
+            files.length,
+            'Indexing',
+            slowFile: files[next],
+          );
+          notifyListeners();
+        }
+      });
+      final why = await done.future;
+      timer.cancel();
+      if (why == 'end' || why == 'cancel') break;
+      // The worker is stuck in (or died reading) files[next]: drop it, note
+      // the file and carry on with the one after.
+      run.killIsolate();
+      if (next >= files.length) break;
+      final bad = files[next];
+      var size = -1, mtime = -1;
+      try {
+        final st = File(bad).statSync();
+        size = st.size;
+        mtime = st.modified.millisecondsSinceEpoch;
+      } catch (_) {}
+      if (why == 'timeout') {
+        hungFiles++;
+        result.issues.add(
+          ScanIssue(
+            bad,
+            ScanIssueKind.timedOut,
+            'Reading its tune info took over ${probeTimeout.inSeconds} s; '
+            'skipped until the file changes.',
+            size: size,
+            mtime: mtime,
+          ),
+        );
+      } else {
+        result.issues.add(
+          ScanIssue(bad, ScanIssueKind.crashed, 'The scanner stopped ($why).'),
+        );
+      }
+      next++;
+      if (hungFiles >= maxHungFiles) {
+        result.gaveUp = true;
+        result.notReached.addAll(files.skip(next));
+        break;
+      }
+    }
+    return result;
   }
 
   // ------------------------------------------------------------ browse/search
@@ -585,82 +917,212 @@ class LibraryController extends ChangeNotifier {
 Map<String, dynamic> _decode(String path) =>
     jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
 
-class _ScanArgs {
-  _ScanArgs(this.port, this.roots, this.known, this.full, this.songlengths);
-  final SendPort port;
-  final List<String> roots;
-  final Map<String, List<Object>> known;
-  final bool full; // re-read every file instead of reusing unchanged ones
-  final String? songlengths;
+class _ScanRun {
+  final List<ReceivePort> _ports = [];
+  Isolate? isolate;
+  bool cancelled = false;
+  void Function()? onCancel;
+
+  ReceivePort newPort() {
+    final port = ReceivePort();
+    _ports.add(port);
+    return port;
+  }
+
+  void killIsolate() {
+    // A worker stuck inside native code does not stop until that code
+    // returns; it is abandoned (its port is closed, so nothing it sends
+    // later is read).
+    isolate?.kill(priority: Isolate.immediate);
+    isolate = null;
+  }
+
+  void cancel() {
+    cancelled = true;
+    killIsolate();
+    onCancel?.call();
+  }
+
+  void dispose() {
+    killIsolate();
+    for (final p in _ports) {
+      p.close();
+    }
+    _ports.clear();
+  }
 }
 
-void _scanWorker(_ScanArgs a) {
-  final files = <File>[];
-  // Locations that could not be read (offline drive, SD card removed, storage
-  // permission revoked on Android): keep their old index instead of
-  // dropping every tune in them.
+class _Listed {
+  _Listed(this.files, this.unreadableRoots, this.issues);
+  final List<String> files;
+  final List<String> unreadableRoots;
+  final List<ScanIssue> issues; // folders that could not be opened
+  List<String> get badDirs => [for (final i in issues) i.path];
+}
+
+class _Probed {
+  final List<List<Object>> tracks = [];
+  final List<ScanIssue> issues = [];
+  final Set<String> notReached = {};
+  int changed = 0;
+  bool gaveUp = false;
+}
+
+class _ListArgs {
+  _ListArgs(this.port, this.roots);
+  final SendPort port;
+  final List<String> roots;
+}
+
+/// Lists the tunes below [roots], one folder at a time, so a folder that
+/// cannot be opened (permissions, a name Windows cannot handle, a path that
+/// is too long, a network error) is reported and skipped instead of
+/// failing the whole location.
+void _listWorker(_ListArgs a) {
+  final files = <String>[];
   final unreadable = <String>[];
+  final badDirs = <List<String>>[];
+  var folders = 0;
+  var lastSend = DateTime.now();
   for (final r in a.roots) {
     try {
       if (!Directory(r).existsSync()) {
         unreadable.add(r);
         continue;
       }
-      for (final e in Directory(
-        r,
-      ).listSync(recursive: true, followLinks: false)) {
-        if (e is File && isSupportedFile(e.path)) {
-          files.add(e);
-        }
-      }
     } catch (_) {
       unreadable.add(r);
+      continue;
     }
-  }
-  a.port.send(['progress', 0, files.length]);
-
-  final native = ChipDeckNative.open();
-  final out = <List<Object>>[];
-  var changed = 0;
-  final seen = <String>{};
-  for (var i = 0; i < files.length; i++) {
-    final f = files[i];
-    try {
-      final st = f.statSync();
-      final size = st.size;
-      final mtime = st.modified.millisecondsSinceEpoch;
-      seen.add(f.path);
-      final old = a.full ? null : a.known[f.path];
-      if (old != null && old[7] == size && old[8] == mtime) {
-        out.add(old);
-      } else {
-        final info = native.probe(f.path, songlengths: a.songlengths);
-        if (info != null) {
-          out.add(
-            LibraryTrack(
-              path: f.path,
-              title: info.title,
-              author: info.author,
-              released: info.released,
-              format: info.format,
-              subtunes: info.subtunes,
-              lengthMs: info.lengthMs ?? -1,
-              size: size,
-              mtime: mtime,
-              sidChips: info.sidChips,
-              system: info.system,
-            ).toJson(),
-          );
-          changed++;
+    final stack = <String>[r];
+    while (stack.isNotEmpty) {
+      final dir = stack.removeLast();
+      folders++;
+      final subdirs = <String>[];
+      try {
+        for (final e in Directory(dir).listSync(followLinks: false)) {
+          if (e is Directory) {
+            subdirs.add(e.path);
+          } else if (e is File && isSupportedFile(e.path)) {
+            files.add(e.path);
+          }
+        }
+      } on FileSystemException catch (e) {
+        if (p.equals(dir, r)) {
+          unreadable.add(r);
+        } else {
+          badDirs.add([dir, _describe(e)]);
+        }
+      } catch (e) {
+        if (p.equals(dir, r)) {
+          unreadable.add(r);
+        } else {
+          badDirs.add([dir, '$e']);
         }
       }
-    } catch (_) {}
-    if (i % 250 == 0) a.port.send(['progress', i, files.length]);
-  }
-  for (final e in a.known.entries) {
-    if (!seen.contains(e.key) && unreadable.any((r) => p.isWithin(r, e.key))) {
-      out.add(e.value);
+      // Depth first, in name order.
+      subdirs.sort((x, y) => y.toLowerCase().compareTo(x.toLowerCase()));
+      stack.addAll(subdirs);
+      final now = DateTime.now();
+      if (now.difference(lastSend).inMilliseconds >= 100) {
+        lastSend = now;
+        a.port.send(['dir', folders, files.length]);
+      }
     }
   }
-  Isolate.exit(a.port, ['done', out, changed]);
+  Isolate.exit(a.port, ['listed', files, unreadable, badDirs]);
+}
+
+String _describe(FileSystemException e) {
+  final os = e.osError;
+  if (os != null && os.message.isNotEmpty) {
+    return '${os.message.trim()} (error ${os.errorCode})';
+  }
+  return e.message;
+}
+
+class _ProbeArgs {
+  _ProbeArgs(
+    this.port,
+    this.files,
+    this.start,
+    this.known,
+    this.hung,
+    this.full,
+    this.songlengths,
+  );
+  final SendPort port;
+  final List<String> files;
+  final int start;
+  final Map<String, List<Object>> known;
+  final Map<String, List<int>> hung; // path: [size, mtime]
+  final bool full; // re-read every file instead of reusing unchanged ones
+  final String? songlengths;
+}
+
+/// Reads the tune info of files[start..], sending one result per file:
+/// ['r', index, track json or null, issue json or null, changed].
+void _probeWorker(_ProbeArgs a) {
+  final native = ChipDeckNative.open();
+  for (var i = a.start; i < a.files.length; i++) {
+    final path = a.files[i];
+    List<Object>? track;
+    List<Object>? issue;
+    var changed = false;
+    try {
+      final st = File(path).statSync();
+      if (st.type == FileSystemEntityType.notFound) {
+        throw FileSystemException('The file is gone', path);
+      }
+      final size = st.size;
+      final mtime = st.modified.millisecondsSinceEpoch;
+      final old = a.full ? null : a.known[path];
+      final h = a.hung[path];
+      if (old != null && old[7] == size && old[8] == mtime) {
+        track = old;
+      } else if (h != null && h[0] == size && h[1] == mtime) {
+        issue = ScanIssue(
+          path,
+          ScanIssueKind.timedOut,
+          'Took too long to read last time; skipped until the file changes '
+          '(Rebuild index tries it again).',
+          size: size,
+          mtime: mtime,
+        ).toJson();
+      } else {
+        final info = native.probe(path, songlengths: a.songlengths);
+        if (info != null) {
+          track = LibraryTrack(
+            path: path,
+            title: info.title,
+            author: info.author,
+            released: info.released,
+            format: info.format,
+            subtunes: info.subtunes,
+            lengthMs: info.lengthMs ?? -1,
+            size: size,
+            mtime: mtime,
+            sidChips: info.sidChips,
+            system: info.system,
+          ).toJson();
+          changed = true;
+        } else {
+          issue = ScanIssue(
+            path,
+            ScanIssueKind.notATune,
+            size == 0
+                ? 'The file is empty.'
+                : 'No player recognised it (damaged, or a variant ChipDeck '
+                      'cannot play).',
+          ).toJson();
+        }
+      }
+    } on FileSystemException catch (e) {
+      issue = ScanIssue(path, ScanIssueKind.unreadable, _describe(e)).toJson();
+    } catch (e) {
+      issue = ScanIssue(path, ScanIssueKind.unreadable, '$e').toJson();
+    }
+    a.port.send(['r', i, track, issue, changed]);
+  }
+  a.port.send(['end']);
 }
