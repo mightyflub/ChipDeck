@@ -2,6 +2,8 @@
 // Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
 import 'package:flutter/material.dart';
 
+import 'debug_switches.dart';
+
 import 'library/library.dart';
 import 'native_licenses.dart';
 import 'platform/android_media.dart';
@@ -27,7 +29,7 @@ Future<void> main() async {
   runApp(ChipDeckApp(controller: controller, library: library));
   // Pick up tunes added to the archive since last time (only new or
   // changed files are read, so this is quick).
-  library.rescan();
+  if (!dbgNoRescan) library.rescan();
 }
 
 /// Entry point for the player controls on a second screen (dual-screen
@@ -54,7 +56,11 @@ class ChipDeckApp extends StatelessWidget {
       title: 'ChipDeck',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      home: HomePage(controller: controller, library: library),
+      home: dbgNoSemantics
+          ? ExcludeSemantics(
+              child: HomePage(controller: controller, library: library),
+            )
+          : HomePage(controller: controller, library: library),
     );
   }
 }

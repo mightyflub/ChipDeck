@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../library/library.dart';
 import '../platform/files.dart' as files;
 import '../player/player_controller.dart';
+import '../debug_switches.dart';
 import 'format_filter.dart';
 import 'theme.dart';
 
@@ -316,11 +317,12 @@ class _LibraryPanelState extends State<LibraryPanel> {
         children: [
           Expanded(child: _searchField(hint: 'Search tunes')),
           const SizedBox(width: 8),
-          FormatFilterButton(
-            filter: _filter,
-            counts: lib.formatCounts,
-            onChanged: _setFilter,
-          ),
+          if (!dbgNoFilterButton)
+            FormatFilterButton(
+              filter: _filter,
+              counts: lib.formatCounts,
+              onChanged: _setFilter,
+            ),
         ],
       ),
     );

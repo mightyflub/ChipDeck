@@ -1,5 +1,8 @@
 // Main window: playlist + now playing, adapting to narrow (phone) widths.
 import 'package:flutter/material.dart';
+
+import '../debug_switches.dart';
+
 import 'package:flutter/services.dart';
 
 import '../library/library.dart';
@@ -157,7 +160,7 @@ class _HomePageState extends State<HomePage> {
     // lists.
     final short = !wide && box.maxHeight < 560;
     // Room for three columns (the Windows window opens at 1280 wide).
-    final xwide = wide && box.maxWidth >= 1200;
+    final xwide = wide && box.maxWidth >= 1200 && !dbgNo3Col;
     final content = c.hasEngine
         ? (xwide
               // Large windows: library, now playing and playlist side by
