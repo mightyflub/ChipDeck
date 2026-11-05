@@ -36,6 +36,19 @@ class NowPlaying extends StatelessWidget {
             if (box.maxHeight < 560 && box.maxWidth >= 560) {
               return _Landscape(controller: c, info: info, remote: remote);
             }
+            // Desktop windows: the scopes (or tune info) fill the height
+            // between the title and the controls, nothing scrolls.
+            if (!compact && box.maxHeight >= 560) {
+              // Its own semantics container: without it, Flutter's Windows
+              // accessibility bridge crashed (0.9.0-test.79, null parent in
+              // AccessibilityBridge::CreateRemoveReparentedNodesUpdate)
+              // while a library scan updated the screen. See NOTES.md.
+              return Semantics(
+                container: true,
+                explicitChildNodes: true,
+                child: _Desktop(controller: c, info: info, remote: remote),
+              );
+            }
             return SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(pad, pad, pad, pad),
               child: ConstrainedBox(
@@ -146,6 +159,72 @@ class _Landscape extends StatelessWidget {
                 : Visualizer(controller: c),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _Desktop extends StatelessWidget {
+  const _Desktop({
+    required this.controller,
+    required this.info,
+    required this.remote,
+  });
+  final PlayerController controller;
+  final TuneInfo? info;
+  final bool remote;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    final i = info;
+    final stil = hasStilSource(c);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Header(controller: c, info: i, compact: false),
+              const SizedBox(height: 20),
+              if (stil) ...[
+                PanelSwitch(controller: c),
+                const SizedBox(height: 10),
+              ],
+              Expanded(
+                child: stil && c.showTuneInfo
+                    ? Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Palette.panel,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Palette.border),
+                        ),
+                        child: TuneInfoView(controller: c),
+                      )
+                    : Visualizer(controller: c),
+              ),
+              const SizedBox(height: 20),
+              _Progress(controller: c),
+              if (!remote) ...[
+                const SizedBox(height: 8),
+                _Transport(controller: c),
+              ],
+              if (!remote && i != null && i.subtunes > 1) ...[
+                const SizedBox(height: 14),
+                // At most about two rows of buttons; more scroll.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 112),
+                  child: SingleChildScrollView(
+                    child: _Subtunes(controller: c, info: i),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -445,7 +524,7 @@ class _Transport extends StatelessWidget {
     final canNextSub = i != null && i.currentSubtune < i.subtunes;
     return LayoutBuilder(
       builder: (context, box) {
-        final narrow = box.maxWidth < 520;
+        final narrow = box.maxWidth < 560;
         final buttons = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -513,12 +592,18 @@ class _Transport extends StatelessWidget {
         }
         return Row(
           children: [
-            SizedBox(
-              width: 200,
+            Expanded(
               child: Align(alignment: Alignment.centerLeft, child: advance),
             ),
-            Expanded(child: Center(child: buttons)),
-            SizedBox(width: 200, child: volume),
+            buttons,
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(child: SizedBox(width: 200, child: volume)),
+                ],
+              ),
+            ),
           ],
         );
       },

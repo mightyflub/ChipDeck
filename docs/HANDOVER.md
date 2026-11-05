@@ -52,6 +52,33 @@ and the version is given whenever a build is shared.
 
 ## Current state (2026-11-04)
 
+- **Format filter and desktop layout (0.9.0, branch claude/project-thread-zton23):**
+  Stephen asked for a filter that scales as formats are added, and for a
+  Windows layout that uses the space. The library's row of filter chips
+  is now one "Formats" button (`app/lib/ui/format_filter.dart`) that opens
+  a panel grouped by system (Commodore 64, Atari ST, Amiga, PC), each with
+  a tristate checkbox and one chip per format with tune counts. Any mix
+  can be picked (e.g. SNDH + MOD); the choice is remembered
+  (SharedPreferences `libraryFormats`). The formats live in one list,
+  `formatGroups` in `app/lib/library/library.dart`: **a new format = one
+  line there** (plus its case in `LibraryTrack.kind`). On short landscape
+  screens the panel puts the systems in two columns when wide enough.
+  Layout by window size (`home_page.dart`): 1200+ px wide shows Library |
+  Now playing | Playlist side by side (Windows opens at 1280x820);
+  860-1200 keeps the Library/Playlist switch beside Now playing. On both,
+  Now playing (`_Desktop` in `now_playing.dart`) fills the height: the
+  scopes (or the STIL info, via the same Scopes | Info switch as on the
+  Ayn Thor) stretch between the title and the controls; nothing scrolls.
+  Phone and landscape layouts are unchanged apart from the filter button.
+  Same Dart code on Windows and Android. Screenshots:
+  docs/screenshots/desktop-format-filter.png, desktop-wide-1920.png,
+  landscape-format-filter.png. Details: NOTES.md (2026-11-04, Format
+  filter and desktop layout).
+  The desktop Now playing is wrapped in its own `Semantics` container:
+  without it, Flutter's Windows accessibility bridge crashed during a
+  library scan (0.9.0-test.79; see NOTES.md). Keep it if you rework that
+  layout. Stephen confirmed 0.9.0-test.84 works on Windows (2026-11-05):
+  layout, filter, playback, full rescan. Not yet tried on the Ayn Thor.
 - **TFMX and TFMX-ST (0.8.0, branch claude/project-thread-ir84g9):**
   Amiga TFMX (v1.5, Pro, 7V; also Hippel TFMX and Future Composer, which
   come with the same library) is played by vendored libtfmxaudiodecoder

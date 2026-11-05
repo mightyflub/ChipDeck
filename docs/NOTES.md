@@ -532,3 +532,65 @@ Integration:
   subtunes; passes under ASan/UBSan.
 
 Not tested: real TFMX or TFMX-ST files (Modland is blocked in the cloud).
+
+## 2026-11-04: Format filter and desktop layout (0.9.0)
+
+Stephen: "we need a better way of choosing the platform filters. As we add
+more they won't all fit on screen at once. Secondly the windows app looks
+bare and the space isn't well used."
+
+Filter. The old chips (All / C64 / ST / MOD) were one fixed enum and
+already scrolled sideways in narrow panels. Replaced by a single
+"Formats" button that opens a drop-down panel (a MenuAnchor whose one
+child is the panel, so clicks inside don't close it):
+- Systems with a tristate checkbox (all / some / none of their formats),
+  formats as chips under them, each with how many tunes the library has.
+- Multi-select. Picking every format is the same as no filter. The
+  button shows the choice ("Atari ST, MOD", or "5 formats" when long).
+- `FormatFilter` is now a set of keys "system/kind" (kind as in
+  `LibraryTrack.kind`), because TFMX exists on both the Amiga and the ST.
+- Remembered between runs (SharedPreferences `libraryFormats`).
+- Considered: a left sidebar of checkboxes (only fits wide windows, and
+  Android would still need something else) and a dialog (heavier for a
+  quick change). The drop-down works the same everywhere.
+
+Desktop layout. At 1280x820 (the Windows default) the old layout showed
+Library or Playlist in a 486 px side panel and Now playing with a fixed
+190 px scope, leaving the lower third of the window empty. Now:
+- 1200 px and wider: Library | Now playing | Playlist, three columns.
+- Now playing on any non-phone window at least 560 px tall: scopes fill
+  the height between the title and the controls (the per-channel tiles
+  already stretch to a bounded height); subtune buttons are capped at
+  about two rows and scroll. STIL notes use the Scopes | Info switch
+  instead of a long section below (which is what made the old page
+  scroll).
+- The transport row no longer overflows in middling widths: the side
+  parts flex, and the two-row form starts below 560 px.
+- Library search box hint shortened to "Search tunes" so the filter
+  button fits beside it in a narrow column.
+
+Checked under Xvfb with a made-up 975-tune index (fake paths in an
+unreadable root, so the startup rescan keeps them) at 1920x1080,
+1280x820, 1000x760, 800x480, 731x411 (Ayn Thor top screen) and 411x860.
+
+### Windows crash in 0.9.0-test.79 (fixed in the next build)
+
+Stephen: 0.9.0-test.79 crashed on Windows a few seconds after launch,
+during the startup library scan; 0.8 did not. Windows event log: access
+violation in flutter_windows.dll at offset 0x3c1ca. Symbolised against
+the engine's PDB (Flutter 3.47.9, engine 89c39edf, PDB ships in
+windows-x64-release/windows-x64-flutter.zip): `ui::AXNode::id` inlined in
+`flutter::AccessibilityBridge::CreateRemoveReparentedNodesUpdate`
+(accessibility_bridge.cc:229), i.e. a semantics child whose parent is
+null. The engine builds the accessibility tree only when something on the
+PC uses UI Automation, which is why it never showed in Linux tests.
+
+Diagnostic builds with environment switches (test.80 and test.82, run on
+Stephen's PC 8 times each, round-robin, 40 s): unchanged build crashed
+8/8; with the new full-height Now playing panel turned off, or wrapped in
+its own `Semantics(container: true, explicitChildNodes: true)`, or inside
+a scroll view (as the old layout was): 0/8 each. The three-column layout
+and the filter button made no difference. Fix: the Semantics container
+(cheapest, keeps the layout). Exact framework trigger not found; a
+widget-test check for semantics nodes changing parent saw none, so it
+is probably an engine bookkeeping bug that this tree shape avoids.

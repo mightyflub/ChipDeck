@@ -156,8 +156,28 @@ class _HomePageState extends State<HomePage> {
     // replaces the title bar and the bottom bar, leaving the height for
     // lists.
     final short = !wide && box.maxHeight < 560;
+    // Room for three columns (the Windows window opens at 1280 wide).
+    final xwide = wide && box.maxWidth >= 1200;
     final content = c.hasEngine
-        ? (wide
+        ? (xwide
+              // Large windows: library, now playing and playlist side by
+              // side, so nothing hides behind a switch.
+              ? Row(
+                  children: [
+                    SizedBox(
+                      width: (box.maxWidth * 0.3).clamp(360, 560),
+                      child: library,
+                    ),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: nowPlaying),
+                    const VerticalDivider(width: 1),
+                    SizedBox(
+                      width: (box.maxWidth * 0.22).clamp(290, 420),
+                      child: playlist,
+                    ),
+                  ],
+                )
+              : wide
               ? Row(
                   children: [
                     SizedBox(
