@@ -11,6 +11,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../hvsc/stil.dart';
 import '../native/chipdeck_ffi.dart';
+import 'collections.dart';
+import 'shuffle.dart';
+
+export 'collections.dart'
+    show
+        mainListId,
+        favouritesId,
+        homeId,
+        folderView,
+        folderOfView,
+        UserPlaylist,
+        PlaylistFolder;
 
 /// File extensions the core can play.
 const supportedExtensions = {
@@ -108,6 +120,30 @@ class PlayerController extends ChangeNotifier {
   /// list instead. Only one of [currentIndex] and [_queueIndex] is set.
   List<PlaylistEntry> _queue = const [];
   int? _queueIndex;
+
+  /// Where [_queue] came from: null for the library, else the id of a
+  /// collection (favourites or one of the user's playlists).
+  String? _queueSource;
+
+  /// Favourites and the user's own playlists.
+  final collections = Collections();
+
+  /// What the Playlists panel shows: [homeId] (the list of playlists), a
+  /// folder ([folderView] of its id), or a list: [mainListId],
+  /// [favouritesId] or a user playlist id.
+  String shownList = homeId;
+
+  /// Lists tunes were added to most recently (first = newest), offered
+  /// first in the "add to" menus.
+  final List<String> recentLists = [];
+
+  /// Looks up a tune's details in the library index (set in main.dart),
+  /// so favourites and playlists show titles without probing the files.
+  TuneInfo? Function(String path)? lookupInfo;
+
+  /// Entries for collection tunes, by path, so details are probed once.
+  final Map<String, PlaylistEntry> _entries = {};
+  final Set<String> _probed = {};
   TuneInfo? info;
   bool playing = false;
   int positionMs = 0;
@@ -156,7 +192,16 @@ class PlayerController extends ChangeNotifier {
       : (_queueIndex != null ? _queue[_queueIndex!] : null);
 
   /// True while playing tunes from the library rather than the playlist.
-  bool get playingFromLibrary => _queueIndex != null;
+  bool get playingFromLibrary => _queueIndex != null && _queueSource == null;
+
+  /// The list the current tune is played from: [mainListId], a collection
+  /// id, or null for the library (or nothing playing).
+  String? get playingList => currentIndex != null
+      ? mainListId
+      : (_queueIndex != null ? _queueSource : null);
+
+  /// Whether next/previous have a list to step through.
+  bool get canSkip => listLength > 0;
 
   /// Position (1-based, 0 = none) and length of the list being played:
   /// the playlist, or the library list a tune was started from.
@@ -199,15 +244,39 @@ class PlayerController extends ChangeNotifier {
       stilPath = _stilBeside(songlengthsPath!);
     }
     if (stilPath != null) _loadStil(stilPath!);
+    collections.load(
+      favourites: _prefs.getStringList('favourites'),
+      playlists: _prefs.getString('userPlaylists'),
+      folders: _prefs.getString('playlistFolders'),
+    );
+    recentLists.addAll(
+      (_prefs.getStringList('recentLists') ?? const []).where(
+        (id) => collections.byId(id) != null,
+      ),
+    );
+    // The Playlists panel always starts on the list of playlists
+    // (Stephen, 2026-11-05).
+    shownList = homeId;
     final saved = _prefs.getStringList('playlist') ?? const [];
     addFiles(saved.where((f) => File(f).existsSync()).toList(), persist: false);
     final lastTune = _prefs.getString('lastTune');
     final last = _prefs.getInt('lastIndex');
     if (lastTune != null && File(lastTune).existsSync()) {
-      // Last tune came from the library: bring it back without adding it
-      // to the playlist.
-      _queue = [PlaylistEntry(lastTune)];
-      _queueIndex = 0;
+      // Last tune came from the library or a collection: bring it back
+      // without adding it to the playlist. From a collection, next and
+      // previous carry on through it.
+      final source = _prefs.getString('lastSource');
+      final at = source == null
+          ? -1
+          : (collections.pathsOf(source)?.indexOf(lastTune) ?? -1);
+      if (at >= 0) {
+        _queue = collectionEntries(source!, probe: false);
+        _queueIndex = at;
+        _queueSource = source;
+      } else {
+        _queue = [PlaylistEntry(lastTune)];
+        _queueIndex = 0;
+      }
       _loadCurrent(autoplay: false);
     } else if (last != null && last >= 0 && last < playlist.length) {
       currentIndex = last;
@@ -315,8 +384,12 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Random order for next/previous while [shuffle] is on.
+  final _order = ShuffleOrder();
+
   void toggleShuffle() {
     shuffle = !shuffle;
+    _order.reset();
     _prefs.setBool('shuffle', shuffle);
     notifyListeners();
   }
@@ -416,6 +489,264 @@ class PlayerController extends ChangeNotifier {
   void _clearQueue() {
     _queue = const [];
     _queueIndex = null;
+    _queueSource = null;
+  }
+
+  // -------------------------------------------- favourites and playlists
+  /// The name shown for a list id.
+  String listName(String id) => switch (id) {
+    mainListId => 'Playing Now',
+    favouritesId => 'Favourites',
+    _ => collections.byId(id)?.name ?? 'Playlist',
+  };
+
+  /// Whether [id] is a list of tunes (not the browser or a folder).
+  bool isTuneList(String id) =>
+      id == mainListId || collections.pathsOf(id) != null;
+
+  bool _validView(String id) {
+    if (id == homeId || isTuneList(id)) return true;
+    final f = folderOfView(id);
+    return f != null && collections.folderById(f) != null;
+  }
+
+  /// Shows the browser ([homeId]), a folder ([folderView]) or a list.
+  void showList(String id) {
+    if (!_validView(id)) id = homeId;
+    if (shownList == id) return;
+    shownList = id;
+    notifyListeners();
+  }
+
+  /// Where "back" goes from [view]: a list or folder's folder, else home.
+  String parentView(String view) {
+    final String? folder;
+    if (folderOfView(view) case final f?) {
+      folder = collections.folderById(f)?.parent;
+    } else {
+      folder = collections.byId(view)?.folder;
+    }
+    return folder == null ? homeId : folderView(folder);
+  }
+
+  void _touchRecent(String id) {
+    if (collections.byId(id) == null) return;
+    recentLists
+      ..remove(id)
+      ..insert(0, id);
+    if (recentLists.length > 5) recentLists.removeRange(5, recentLists.length);
+    _prefs.setStringList('recentLists', recentLists);
+  }
+
+  String createFolder(String name, {String? parent}) {
+    final f = collections.createFolder(name, parent: parent);
+    _saveCollections();
+    notifyListeners();
+    return f.id;
+  }
+
+  void renameFolder(String id, String name) {
+    if (collections.renameFolder(id, name)) {
+      _saveCollections();
+      notifyListeners();
+    }
+  }
+
+  /// Deletes a folder; what was in it moves up a level.
+  void deleteFolder(String id) {
+    final up = parentView(folderView(id));
+    if (!collections.deleteFolder(id)) return;
+    if (shownList == folderView(id)) showList(up);
+    _saveCollections();
+    notifyListeners();
+  }
+
+  void movePlaylist(String id, String? folder) {
+    if (collections.movePlaylist(id, folder)) {
+      _saveCollections();
+      notifyListeners();
+    }
+  }
+
+  bool moveFolder(String id, String? parent) {
+    final ok = collections.moveFolder(id, parent);
+    if (ok) {
+      _saveCollections();
+      notifyListeners();
+    }
+    return ok;
+  }
+
+  /// Entries (with details where known) for a collection's tunes. Tunes
+  /// whose details are unknown are probed in the background.
+  List<PlaylistEntry> collectionEntries(String id, {bool probe = true}) {
+    final paths = collections.pathsOf(id) ?? const <String>[];
+    final out = [
+      for (final f in paths)
+        _entries.putIfAbsent(
+          f,
+          () => PlaylistEntry(f)..info = lookupInfo?.call(f),
+        ),
+    ];
+    if (probe) {
+      // Each tune is probed at most once (_probed), even if it fails.
+      final unknown = [
+        for (final e in out)
+          if (e.info == null && _probed.add(e.path)) e,
+      ];
+      if (unknown.isNotEmpty) _probe(unknown);
+    }
+    return out;
+  }
+
+  /// Remembers known details for tunes going into a collection.
+  void _seed(Iterable<(String, TuneInfo?)> items) {
+    for (final (path, info) in items) {
+      final e = _entries.putIfAbsent(path, () => PlaylistEntry(path));
+      e.info ??= info;
+    }
+  }
+
+  /// Keeps next/previous in step after the collection being played from
+  /// changes. If the playing tune was taken out, the old order is kept.
+  void _syncQueue(String id) {
+    final at = _queueIndex;
+    if (_queueSource != id || at == null) return;
+    final path = _queue[at].path;
+    final entries = collectionEntries(id, probe: false);
+    final now = entries.indexWhere((e) => e.path == path);
+    if (now < 0) return;
+    _queue = entries;
+    _queueIndex = now;
+  }
+
+  void _saveCollections() {
+    _prefs.setStringList('favourites', collections.favouritesToPrefs());
+    _prefs.setString('userPlaylists', collections.playlistsToPrefs());
+    _prefs.setString('playlistFolders', collections.foldersToPrefs());
+  }
+
+  bool isFavourite(String path) => collections.isFavourite(path);
+
+  /// Stars or unstars a tune ([path], or the current tune). Returns the new
+  /// state.
+  bool toggleFavourite([String? path, TuneInfo? info]) {
+    final e = current;
+    path ??= e?.path;
+    if (path == null) return false;
+    _seed([(path, info ?? (path == e?.path ? e?.info : null))]);
+    final on = collections.toggleFavourite(path);
+    _syncQueue(favouritesId);
+    _saveCollections();
+    notifyListeners();
+    return on;
+  }
+
+  /// Adds tunes to a list: the main playlist, favourites or a user
+  /// playlist. Returns how many were new to it.
+  int addToList(String id, List<(String, TuneInfo?)> items) {
+    if (id == mainListId) {
+      final before = playlist.length;
+      final known = [
+        for (final (path, info) in items)
+          if (info != null) (path, info),
+      ];
+      if (known.length == items.length) {
+        addKnown(known);
+      } else {
+        addFiles([for (final (path, _) in items) path]);
+      }
+      return playlist.length - before;
+    }
+    _seed(items);
+    _touchRecent(id);
+    final n = collections.addTo(id, [for (final (path, _) in items) path]);
+    _syncQueue(id);
+    _saveCollections();
+    notifyListeners();
+    return n;
+  }
+
+  /// Makes a new playlist (optionally with tunes) and returns its id.
+  String createPlaylist(
+    String name, [
+    List<(String, TuneInfo?)> items = const [],
+    String? folder,
+  ]) {
+    _seed(items);
+    final pl = collections.create(
+      name,
+      paths: [for (final (path, _) in items) path],
+      folder: folder,
+    );
+    _touchRecent(pl.id);
+    _saveCollections();
+    notifyListeners();
+    return pl.id;
+  }
+
+  /// Saves the main playlist as a new named playlist.
+  String savePlaylistAs(String name) =>
+      createPlaylist(name, [for (final e in playlist) (e.path, e.info)]);
+
+  void renamePlaylist(String id, String name) {
+    if (collections.rename(id, name)) {
+      _saveCollections();
+      notifyListeners();
+    }
+  }
+
+  void deletePlaylist(String id) {
+    final up = parentView(id);
+    if (!collections.delete(id)) return;
+    if (shownList == id) showList(up);
+    if (recentLists.remove(id)) {
+      _prefs.setStringList('recentLists', recentLists);
+    }
+    if (_queueSource == id) _queueSource = null; // keeps playing its copy
+    _saveCollections();
+    notifyListeners();
+  }
+
+  void removeFromList(String id, int index) {
+    if (id == mainListId) return removeAt(index);
+    if (collections.removeAt(id, index)) {
+      _syncQueue(id);
+      _saveCollections();
+      notifyListeners();
+    }
+  }
+
+  void moveInList(String id, int oldIndex, int newIndex) {
+    if (collections.move(id, oldIndex, newIndex)) {
+      _syncQueue(id);
+      _saveCollections();
+      notifyListeners();
+    }
+  }
+
+  void clearList(String id) {
+    if (id == mainListId) return clearPlaylist();
+    collections.clear(id);
+    _saveCollections();
+    notifyListeners();
+  }
+
+  /// Adds every tune of a collection to the main playlist.
+  int addListToPlaylist(String id) => addToList(mainListId, [
+    for (final e in collectionEntries(id, probe: false)) (e.path, e.info),
+  ]);
+
+  /// Plays a collection from [index] without touching the main playlist;
+  /// next and previous step through the collection.
+  void playList(String id, int index) {
+    if (id == mainListId) return playIndex(index);
+    final entries = collectionEntries(id);
+    if (index < 0 || index >= entries.length) return;
+    _queue = entries;
+    _queueSource = id;
+    currentIndex = null;
+    _playQueue(index);
   }
 
   // Probe metadata in a background isolate, in batches, so the UI stays smooth.
@@ -457,6 +788,7 @@ class PlayerController extends ChangeNotifier {
       for (final (path, tuneInfo) in items)
         PlaylistEntry(path)..info = tuneInfo,
     ];
+    _queueSource = null;
     currentIndex = null;
     _playQueue(start.clamp(0, _queue.length - 1));
   }
@@ -464,6 +796,11 @@ class PlayerController extends ChangeNotifier {
   void _playQueue(int index) {
     _queueIndex = index;
     _prefs.setString('lastTune', _queue[index].path);
+    if (_queueSource != null) {
+      _prefs.setString('lastSource', _queueSource!);
+    } else {
+      _prefs.remove('lastSource');
+    }
     _loadCurrent(autoplay: true);
   }
 
@@ -543,10 +880,14 @@ class PlayerController extends ChangeNotifier {
     final go = fromLibrary ? _playQueue : playIndex;
     if (length == 0) return;
     if (shuffle && length > 1) {
-      final now = DateTime.now().microsecondsSinceEpoch;
-      var n = now % length;
-      if (n == at) n = (n + 1) % length;
-      go(n);
+      // Every tune once in a random order, then stop (as at the end of
+      // the list in order).
+      final n = _order.next(fromLibrary ? _queue : playlist, length, at);
+      if (n == null) {
+        stop();
+      } else {
+        go(n);
+      }
       return;
     }
     final next = (at ?? -1) + 1;
@@ -561,6 +902,19 @@ class PlayerController extends ChangeNotifier {
     if (positionMs > 3000 && info != null) {
       selectSubtune(info!.currentSubtune); // restart
       return;
+    }
+    if (shuffle) {
+      // Back through the tunes played in random order.
+      final fromLibrary = _queueIndex != null;
+      final n = _order.previous(
+        fromLibrary ? _queue : playlist,
+        fromLibrary ? _queue.length : playlist.length,
+        fromLibrary ? _queueIndex : currentIndex,
+      );
+      if (n != null) {
+        fromLibrary ? _playQueue(n) : playIndex(n);
+        return;
+      }
     }
     if (_queueIndex != null) {
       if (_queueIndex! > 0) _playQueue(_queueIndex! - 1);

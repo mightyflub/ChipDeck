@@ -16,6 +16,7 @@ Future<void> main() async {
   registerNativeLicenses();
   final controller = await PlayerController.create();
   final library = await LibraryController.create();
+  controller.lookupInfo = library.infoFor;
   library.songlengthsPath = () => controller.songlengthsPath;
   library.onSonglengthsFound = (path) => controller.setSonglengths(path);
   library.stilPath = () => controller.stilPath;

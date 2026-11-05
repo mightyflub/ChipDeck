@@ -1,0 +1,197 @@
+// Copyright (C) 2026 ChipDeck contributors. GPL-2.0-or-later.
+import 'dart:io';
+
+import 'package:chipdeck/player/collections.dart';
+import 'package:chipdeck/player/player_controller.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+void main() {
+  group('Collections', () {
+    test('favourites toggle, keep order and skip duplicates', () {
+      final c = Collections();
+      expect(c.toggleFavourite('/a.sid'), isTrue);
+      expect(c.toggleFavourite('/b.sid'), isTrue);
+      expect(c.addTo(favouritesId, ['/a.sid', '/c.sid']), 1);
+      expect(c.favourites, ['/a.sid', '/b.sid', '/c.sid']);
+      expect(c.toggleFavourite('/a.sid'), isFalse);
+      expect(c.isFavourite('/a.sid'), isFalse);
+      expect(c.favourites, ['/b.sid', '/c.sid']);
+    });
+
+    test('playlists: create, add, move, remove, rename, delete', () {
+      final c = Collections();
+      final pl = c.create('Hubbard', paths: ['/1', '/2', '/2']);
+      expect(pl.paths, ['/1', '/2']);
+      expect(c.addTo(pl.id, ['/2', '/3']), 1);
+      expect(c.move(pl.id, 0, 2), isTrue);
+      expect(pl.paths, ['/2', '/3', '/1']);
+      expect(c.move(pl.id, 2, 0), isTrue);
+      expect(pl.paths, ['/1', '/2', '/3']);
+      expect(c.removeAt(pl.id, 1), isTrue);
+      expect(pl.paths, ['/1', '/3']);
+      expect(c.rename(pl.id, '  Rob  '), isTrue);
+      expect(pl.name, 'Rob');
+      expect(c.rename(pl.id, ' '), isFalse);
+      expect(c.delete(pl.id), isTrue);
+      expect(c.byId(pl.id), isNull);
+    });
+
+    test('unique names', () {
+      final c = Collections();
+      c.create('Mix');
+      c.create('mix 2');
+      expect(c.uniqueName('Mix'), 'Mix 3');
+      expect(c.uniqueName('Other'), 'Other');
+      expect(c.create('').name, 'New playlist');
+    });
+
+    test('folders: nest, move, refuse loops, delete moves contents up', () {
+      final c = Collections();
+      final a = c.createFolder('Composers');
+      final b = c.createFolder('Hubbard', parent: a.id);
+      expect(c.createFolder('Composers').name, 'Composers 2');
+      final pl = c.create('Commando mix', folder: b.id);
+      final top = c.create('Loose');
+      expect(c.foldersIn(null).map((f) => f.name), [
+        'Composers',
+        'Composers 2',
+      ]);
+      expect(c.playlistsIn(b.id).single.id, pl.id);
+      expect(c.playlistsIn(null).single.id, top.id);
+      expect(c.folderLabel(b.id), 'Composers / Hubbard');
+      expect(c.playlistCountUnder(a.id), 1);
+      expect(c.moveFolder(a.id, b.id), isFalse); // into its own sub folder
+      expect(c.moveFolder(a.id, a.id), isFalse);
+      expect(c.movePlaylist(top.id, a.id), isTrue);
+      expect(c.playlistCountUnder(a.id), 2);
+      expect(c.deleteFolder(a.id), isTrue);
+      expect(b.parent, isNull);
+      expect(top.folder, isNull);
+      expect(pl.folder, b.id);
+      expect(c.playlists.length, 2);
+    });
+
+    test('folders survive a round trip and broken links are repaired', () {
+      final c = Collections();
+      final a = c.createFolder('A');
+      c.create('P', folder: a.id);
+      final d = Collections()
+        ..load(playlists: c.playlistsToPrefs(), folders: c.foldersToPrefs());
+      expect(d.playlists.single.folder, a.id);
+      expect(d.folders.single.name, 'A');
+      final e = Collections()
+        ..load(
+          playlists: c.playlistsToPrefs(),
+          folders:
+              '[{"id":"x","name":"X","parent":"y"},'
+              '{"id":"y","name":"Y","parent":"x"}]',
+        );
+      expect(e.playlists.single.folder, isNull); // folder A is gone
+      expect(e.folders.where((f) => f.parent == null), isNotEmpty);
+    });
+
+    test('round trip through preferences, ignoring junk', () {
+      final c = Collections();
+      c.toggleFavourite('/f.ym');
+      c.create('A', paths: ['/x.mod']);
+      final d = Collections()
+        ..load(
+          favourites: c.favouritesToPrefs(),
+          playlists: c.playlistsToPrefs(),
+        );
+      expect(d.favourites, ['/f.ym']);
+      expect(d.isFavourite('/f.ym'), isTrue);
+      expect(d.playlists.single.name, 'A');
+      expect(d.playlists.single.paths, ['/x.mod']);
+      final e = Collections()..load(playlists: 'not json');
+      expect(e.playlists, isEmpty);
+      final g = Collections()..load(playlists: '[1, {"id": "x"}]');
+      expect(g.playlists, isEmpty);
+    });
+  });
+
+  group('PlayerController lists', () {
+    late Directory dir;
+    late List<String> tunes;
+
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('chipdeck_lists');
+      tunes = [
+        for (final n in ['one', 'two', 'three'])
+          (File('${dir.path}/$n.sid')..writeAsStringSync('x')).path,
+      ];
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    Future<PlayerController> make([Map<String, Object> prefs = const {}]) {
+      SharedPreferences.setMockInitialValues(prefs);
+      return PlayerController.create();
+    }
+
+    test(
+      'adding to favourites and playlists leaves the playlist alone',
+      () async {
+        final c = await make();
+        c.toggleFavourite(tunes[0]);
+        final id = c.createPlaylist('Mine', [(tunes[1], null)]);
+        c.addToList(id, [(tunes[2], null)]);
+        expect(c.playlist, isEmpty);
+        expect(c.collections.favourites, [tunes[0]]);
+        expect(c.collections.byId(id)!.paths, [tunes[1], tunes[2]]);
+        expect(c.listName(id), 'Mine');
+        expect(c.listName(favouritesId), 'Favourites');
+      },
+    );
+
+    test('collections survive a restart', () async {
+      final c = await make();
+      c.toggleFavourite(tunes[0]);
+      final id = c.createPlaylist('Mine', [(tunes[1], null)]);
+      c.showList(id);
+      final prefs = await SharedPreferences.getInstance();
+      final saved = {for (final k in prefs.getKeys()) k: prefs.get(k)!};
+      final d = await make(saved);
+      expect(d.collections.favourites, [tunes[0]]);
+      expect(d.collections.byId(id)!.paths, [tunes[1]]);
+      expect(d.shownList, homeId); // always starts on the list of lists
+    });
+
+    test('deleting the shown playlist goes back to the browser', () async {
+      final c = await make();
+      final id = c.createPlaylist('Gone');
+      c.showList(id);
+      c.deletePlaylist(id);
+      expect(c.shownList, homeId);
+      expect(c.collections.playlists, isEmpty);
+    });
+
+    test('browser views: back goes to the folder, recent lists', () async {
+      final c = await make();
+      expect(c.shownList, homeId);
+      final f = c.createFolder('Mixes');
+      final id = c.createPlaylist('Party', const [], f);
+      c.showList(id);
+      expect(c.parentView(id), folderView(f));
+      expect(c.parentView(folderView(f)), homeId);
+      expect(c.parentView(favouritesId), homeId);
+      c.showList(folderView(f));
+      c.deleteFolder(f);
+      expect(c.shownList, homeId);
+      expect(c.collections.byId(id)!.folder, isNull);
+      final other = c.createPlaylist('Other');
+      c.addToList(id, [(tunes[0], null)]);
+      expect(c.recentLists.take(2), [id, other]);
+    });
+
+    test('save the playlist as a named playlist', () async {
+      final c = await make();
+      c.addFiles(tunes);
+      final id = c.savePlaylistAs('Copy');
+      expect(c.collections.byId(id)!.paths, tunes);
+      c.clearPlaylist();
+      expect(c.addListToPlaylist(id), 3);
+      expect(c.playlist.map((e) => e.path), tunes);
+    });
+  });
+}

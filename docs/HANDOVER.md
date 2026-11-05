@@ -30,6 +30,8 @@ only inside `lib/platform/`.
   with a second window; not planned unless asked.
 - Windows only: keyboard shortcuts (harmless on Android; work with a
   Bluetooth keyboard).
+- Android second-screen controls (0.11.0): no favourite star there yet;
+  star the tune on the main screen.
 
 ## Version numbers and CI builds
 
@@ -45,6 +47,11 @@ and the version is given whenever a build is shared.
   so every APK installs over the previous one.
 - Builds made by hand without `--dart-define=CHIPDECK_VERSION=...` show
   "dev".
+- 2026-11-05: Actions stopped starting jobs (every job failed in ~5 s with
+  no log, most likely the private repo's minutes). Stephen made the repo
+  public, which gives free Actions minutes. If Actions is ever blocked
+  again, build on Stephen's PC instead: see "Local builds on Stephen's PC"
+  under How to build and run.
 - CI runs on pull requests (test APKs come from these runs), on main and
   on v* tags. The Windows app (Stephen, 2026-11-04: not needed for every
   test build) builds only on main, tags, or a manual "Run workflow" with
@@ -52,6 +59,61 @@ and the version is given whenever a build is shared.
 
 ## Current state (2026-11-05)
 
+- **Favourites and your own playlists (0.11.0, branch claude/project-thread-v2ksvd):**
+  Stephen asked (2026-11-05) for favourites and user-made playlists, testing
+  on Windows first. The Playlist panel is now "Playlists": a picker in its
+  header switches between the main **Playlist** (unchanged behaviour),
+  **Favourites**, and any number of named playlists, plus "New playlist…".
+  Star a tune from Now playing (next to the title, or press **F**), a
+  library row, or a playlist row. The add-to-playlist button (library rows,
+  Now playing, "add all" for folders and search results) is now a menu:
+  Playlist, your playlists (Favourites too for "add all"), New playlist….
+  Playlist rows have a menu (star, remove, add to another list); on
+  desktop they also show star/remove on hover. Favourites and named
+  playlists can be reordered (drag handle on Windows, long press and drag
+  on Android; not while searching), renamed, emptied, deleted, and copied
+  into the main Playlist ("Add all to Playlist"). The main Playlist can be
+  saved as a named playlist. Playing from Favourites or a named playlist
+  works like the library: it does **not** touch the main Playlist, and
+  next/previous/auto-advance/shuffle step through that list (kept in step
+  if it is edited while playing; remembered across restarts). Stored in
+  SharedPreferences (`favourites`, `userPlaylists` JSON, `shownList`,
+  `lastSource`), paths only; titles come from the library index
+  (`LibraryController.infoFor`) or a one-off background probe. Model and
+  list operations: `app/lib/player/collections.dart` (unit tested in
+  `app/test/collections_test.dart`); controller methods in
+  `player_controller.dart` ("favourites and playlists"); shared UI
+  (star button, add-to menu, name/confirm dialogs) in
+  `app/lib/ui/list_actions.dart`. The panel is wrapped in its own
+  `Semantics(container: true)` like the desktop Now playing (Windows
+  accessibility crash, see NOTES.md). Same code on Windows and Android.
+  Also fixed: next/previous were disabled when playing from the library
+  with an empty playlist.
+  **Playlist browser and folders (same PR, after Stephen tried
+  0.11.0-test.97):** he asked for the Playlists side to open on a list of
+  playlists instead of a drop-down, and for playlist folders. The panel now
+  always starts on "Playlists": Playlist and Favourites at the top, then
+  folders and playlists (by name), each with a play button and a menu
+  (rename, move to folder, add all to Playlist, delete). Tap to open; the
+  back arrow goes up a level. Folders nest; "+" and the new-folder button
+  make one in the folder being browsed; deleting a folder moves its
+  contents up a level (nothing lost). The search box finds playlists and
+  folders by name anywhere. The "add to" menus show Playlist, Favourites
+  (for "add all"), the 5 playlists used most recently (`recentLists`),
+  "Choose a playlist…" (a dialog with folders and search, plus "New
+  playlist here") and "New playlist…". Folders are stored as
+  `playlistFolders` JSON; a playlist's folder is its `folder` field.
+  Stephen then asked for the main playlist to be called **"Playing Now"**
+  in the app (only the label; the code still calls it the main playlist,
+  `mainListId`, stored as `playlist`).
+  **Random order (same PR):** Stephen asked for random playback in the
+  player controls. The shuffle button moved from the playlist header to the
+  transport (next to "when a song ends", every layout; S key; also on the
+  Android second-screen controls via a `shuffle` action/state field). It
+  now plays every tune of the list once in a random order, then stops like
+  the end of a list in order; "previous" steps back through the tunes
+  already played (`app/lib/player/shuffle.dart`, tested). Picking a tune by
+  hand or changing the list starts a fresh order.
 - **Library refresh hardening (0.10.1, branch claude/project-thread-dq5ked):**
   Stephen added three music locations (Protracker, Fasttracker2, RealSID)
   while a refresh was running; two of them never got scanned and the app
@@ -375,6 +437,31 @@ shuffle, settings (SID model, Songlengths.md5, STIL.txt, default length),
 STIL/BUGlist tune info for SID tunes (`lib/ui/tune_info.dart`).
 Keys: Space play/pause, Left/Right subtune, N/P tune, +/- volume.
 
+### Local builds on Stephen's PC (fallback when CI is unavailable)
+
+Checked 2026-11-05 through a Remote Control session. Already installed:
+git, Visual Studio Community 2026 with the C++ desktop workload, CMake,
+Ninja, Windows SDK 10.0.26100. Missing: Flutter, Java 17, Android SDK/NDK
+(only Java 25 is installed, and the Android build targets 17). Developer
+Mode is off; Flutter needs it for plugin symlinks, and only Stephen can
+switch it on (Settings > System > For developers).
+To set up (portable installs in a dev folder, no admin rights, PATH set
+only for the build shell):
+- Flutter 3.47.9 stable zip: https://docs.flutter.dev/install/archive
+- Temurin 17 (Android only): https://adoptium.net/temurin/releases/?version=17
+- Android command-line tools or Android Studio (Android only):
+  https://developer.android.com/studio, then `sdkmanager` for the
+  platform, build-tools and NDK versions in `app/android` (accept the
+  licences only with Stephen's OK).
+Not yet checked: whether Flutter 3.47.9 builds with VS 2026. If it
+doesn't, install the VS 2022 Build Tools.
+Build with the CI version scheme, by hand:
+`flutter build windows --release --dart-define=CHIPDECK_VERSION=<base>-test.local<N>`.
+For an APK that installs over CI builds, sign it with the release key.
+Stephen creates `app/android/key.properties` himself so passwords never
+pass through Claude. Use a build number above the last CI run
+(`--build-number`), or Android refuses the update as a downgrade.
+
 ### The Android app
 
 Easiest: download `chipdeck-app-android-<version>` from the latest GitHub Actions run
@@ -479,6 +566,16 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
+0000. Favourites and playlists (0.11.0): Stephen tries the Windows build:
+   star tunes (library, Now playing, F key), make/rename/delete playlists,
+   add from library rows and folders, reorder by dragging, play from a list
+   (main Playlist unchanged; next/previous walk that list), restart (lists,
+   shown list and position come back). Then the APK on the Ayn Thor.
+   Also the playlist browser: folders (nest, move, delete), "Choose a
+   playlist…" in the add menus, search by playlist name.
+   Possible follow-ups: star on the second-screen controls, import/export
+   playlists as .m3u, a "starred" mark or filter in the library, drag
+   playlists onto folders.
 0000. Library refresh (0.10.1): Stephen refreshes the new music
    locations (Protracker, Fasttracker2, RealSID) and checks the scan
    report; then adds a location during a refresh (it should queue).

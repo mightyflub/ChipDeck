@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../native/chipdeck_ffi.dart';
 import '../platform/second_screen.dart';
 import '../player/player_controller.dart';
+import 'list_actions.dart';
 import 'theme.dart';
 import 'tune_info.dart';
 import 'visualizer.dart';
@@ -326,7 +327,7 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Pick a tune from your library or playlist.',
+            'Pick a tune from your library or a playlist.',
             style: TextStyle(color: Palette.textMuted),
           ),
         ],
@@ -359,15 +360,37 @@ class _Header extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        Text(
-          entry.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: (compact ? t.headlineSmall : t.displaySmall)?.copyWith(
-            fontWeight: FontWeight.w800,
-            height: 1.1,
-            letterSpacing: -0.5,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                entry.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: (compact ? t.headlineSmall : t.displaySmall)?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Star (F) and add to a playlist, for the playing tune.
+            FavouriteButton(
+              controller: controller,
+              path: entry.path,
+              info: entry.info,
+              size: compact ? 24 : 28,
+              dimWhenOff: false,
+            ),
+            AddToListButton(
+              controller: controller,
+              size: compact ? 24 : 28,
+              showFavourites: false,
+              items: () => [(entry.path, entry.info)],
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         if ((i?.author ?? '').isNotEmpty)
@@ -531,7 +554,7 @@ class _Transport extends StatelessWidget {
             IconButton(
               tooltip: 'Previous tune (P)',
               iconSize: 28,
-              onPressed: c.playlist.isEmpty ? null : c.previousTrack,
+              onPressed: c.canSkip ? c.previousTrack : null,
               icon: const Icon(Icons.skip_previous_rounded),
             ),
             IconButton(
@@ -555,13 +578,20 @@ class _Transport extends StatelessWidget {
             IconButton(
               tooltip: 'Next tune (N)',
               iconSize: 28,
-              onPressed: c.playlist.isEmpty ? null : c.nextTrack,
+              onPressed: c.canSkip ? c.nextTrack : null,
               icon: const Icon(Icons.skip_next_rounded),
             ),
           ],
         );
         final volume = _Volume(controller: c);
-        final advance = _AdvanceButton(controller: c);
+        // When a song ends, and random order: side by side.
+        final advance = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _AdvanceButton(controller: c),
+            _ShuffleButton(controller: c),
+          ],
+        );
         if (dense) {
           return Row(
             children: [
@@ -607,6 +637,27 @@ class _Transport extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Random order on/off for next, previous and auto-advance (S key).
+class _ShuffleButton extends StatelessWidget {
+  const _ShuffleButton({required this.controller});
+  final PlayerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final on = controller.shuffle;
+    return IconButton(
+      tooltip: on ? 'Random order: on (S)' : 'Random order: off (S)',
+      isSelected: on,
+      onPressed: controller.toggleShuffle,
+      icon: const Icon(Icons.shuffle, color: Palette.textMuted),
+      selectedIcon: const Icon(
+        Icons.shuffle_on_outlined,
+        color: Palette.accent,
+      ),
     );
   }
 }

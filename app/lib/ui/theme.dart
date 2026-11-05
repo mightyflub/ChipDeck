@@ -13,6 +13,7 @@ class Palette {
   static const warm = Color(0xFFFFB86B); // Atari ST
   static const amiga = Color(0xFF7CE38B); // Amiga / tracker modules
   static const textMuted = Color(0xFF9AA0C3);
+  static const star = Color(0xFFFFD166); // favourites
   static const voice = [
     Color(0xFF8E7CFF),
     Color(0xFF5CE1E6),

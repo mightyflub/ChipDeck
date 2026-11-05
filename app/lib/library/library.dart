@@ -823,6 +823,7 @@ class LibraryController extends ChangeNotifier {
   // ------------------------------------------------------------ browse/search
   void _rebuildFolders() {
     _folders.clear();
+    _byPathFor = null;
     tracks.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
     for (final r in roots) {
       _folders[r] = LibraryFolder(r);
@@ -855,6 +856,19 @@ class LibraryController extends ChangeNotifier {
       _folders.putIfAbsent(path, () => LibraryFolder(path));
 
   LibraryFolder? folder(String path) => _folders[path];
+
+  /// The indexed details of the tune at [path], or null when it is not in
+  /// the library. Used to show titles in favourites and playlists.
+  TuneInfo? infoFor(String path) {
+    if (!identical(_byPathFor, tracks)) {
+      _byPathFor = tracks;
+      _byPath = {for (final t in tracks) t.path: t};
+    }
+    return _byPath[path]?.toInfo();
+  }
+
+  List<LibraryTrack>? _byPathFor;
+  Map<String, LibraryTrack> _byPath = const {};
 
   /// All tracks below [dir], in path order.
   List<LibraryTrack> tracksUnder(String dir) => [
