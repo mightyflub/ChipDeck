@@ -65,6 +65,17 @@ cd_audio* cd_audio_create(void)
     cfg.sampleRate = kRate;
     cfg.dataCallback = dataCallback;
     cfg.pUserData = a;
+#if defined(__ANDROID__)
+    // Android: don't ask for the low-latency (MMAP) path. Its buffers are only
+    // a couple of milliseconds long, and when the app goes to the background
+    // Android moves our threads to slower CPU cores, so the emulators can't
+    // always fill a buffer in time and the sound changes (crackle, grit).
+    // A music player doesn't need low latency; the normal path has buffers of
+    // tens of milliseconds, which is plenty of headroom on any core.
+    cfg.performanceProfile = ma_performance_profile_conservative;
+    cfg.aaudio.usage = ma_aaudio_usage_media;
+    cfg.aaudio.contentType = ma_aaudio_content_type_music;
+#endif
     if (ma_device_init(nullptr, &cfg, &a->device) != MA_SUCCESS)
     {
         cd_destroy(a->player);

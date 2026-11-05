@@ -22,6 +22,10 @@ only inside `lib/platform/`.
 
 ### Pending on one platform
 
+- 0.11.1 background audio fix is Android only by design: it changes the
+  AAudio stream settings (`#if __ANDROID__` in `core/src/chipdeck_audio.cpp`).
+  Windows uses WASAPI and never had the problem.
+
 - Android only: background playback notification, lock screen/headset
   controls, pause on headphone unplug (Windows has no equivalent need yet;
   SMTC media keys on Windows would be the counterpart).
@@ -354,6 +358,7 @@ docs/                     HANDOVER.md (this), NOTES.md (log)
 | SID emulation | libsidplayfp 3.1.2 with reSIDfp | Most accurate open engine, maintained, portable C++ |
 | How it is included | Vendored release tarball sources + our own CMake | No xa65/autotools needed; builds with MSVC, MinGW and NDK |
 | Audio output | miniaudio 0.11.26 | One file, WASAPI on Windows, AAudio on Android |
+| Android audio stream (0.11.1) | AAudio "conservative" profile (normal path, no low-latency MMAP), usage media, content music | The low-latency path's ~2 ms buffers underran when the app was backgrounded (threads moved to slow cores), so the sound changed. Windows unchanged (WASAPI, never affected) |
 | Build system | CMake >= 3.16 | Works with Visual Studio and the Android NDK |
 | License | GPL-2.0-or-later (LICENSE) | Required by libsidplayfp |
 | UI | CLI for testing, Flutter app for users | Approved by the owner 2026-11-04 |

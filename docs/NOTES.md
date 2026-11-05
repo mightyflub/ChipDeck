@@ -738,3 +738,22 @@ for every platform on the front page, saying which are tested.
   status, and build steps for Windows (CLI, app), Android, Linux (CLI,
   app), MinGW cross-compile, macOS CLI (untested, no Mac), and a note that
   macOS/iOS apps would need new Flutter runners.
+
+## 2026-11-05: Sound changed when the Android app was backgrounded (0.11.1)
+
+The owner noticed the audio sounds different when the Android app is in the
+background. Cause (from the code): `cd_audio_create()` used miniaudio's
+default performance profile, low latency. On AAudio that asks for
+`AAUDIO_PERFORMANCE_MODE_LOW_LATENCY` (the MMAP path) with callbacks of only
+a burst (a few ms). All emulation runs inside that callback. In the
+background Android moves the app's threads to a more restricted CPU set
+(slower cores, lower clocks), and the emulators (reSIDfp especially) miss
+some deadlines, which is heard as crackle or a rougher sound.
+
+Fix: on Android only, `performanceProfile = conservative`
+(`AAUDIO_PERFORMANCE_MODE_NONE`, the normal mixer path with buffers of tens
+of ms), plus usage `MEDIA` and content type `MUSIC`. Latency only affects
+how fast pause/volume react, which stays well under a tenth of a second.
+Windows (WASAPI shared mode) is unchanged. If the problem still shows, the
+next step is to render ahead on a worker thread into a ring buffer, so the
+audio callback only copies samples.
