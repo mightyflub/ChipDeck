@@ -53,9 +53,33 @@ and the version is given whenever a build is shared.
   again, build on Stephen's PC instead: see "Local builds on Stephen's PC"
   under How to build and run.
 - CI runs on pull requests (test APKs come from these runs), on main and
-  on v* tags. The Windows app (Stephen, 2026-11-04: not needed for every
+  on v* tags (and manual runs; a manual run with "release" ticked or a
+  v* tag publishes a GitHub release, see "Making a release"). The Windows app (Stephen, 2026-11-04: not needed for every
   test build) builds only on main, tags, or a manual "Run workflow" with
   "windows" ticked. Pushes to other branches without a PR build nothing.
+
+## Making a release
+
+Stephen asked (2026-11-05) for GitHub releases; 0.11.0 was the first.
+Releases are on https://github.com/mightyflub/ChipDeck/releases with the
+files `ChipDeck-<version>-windows-x64.zip`, `ChipDeck-<version>-android.apk`
+(signed with the release key) and `ChipDeck-<version>-SHA256SUMS.txt`.
+
+1. On main, `version:` in `app/pubspec.yaml` is the version to release
+   (it must not have been released already).
+2. Write the notes in `docs/releases/<version>.md` (what's new, downloads,
+   known limitations; 0.11.0.md is the model) and merge that to main.
+3. Actions > build > Run workflow, branch **main**, tick **release**.
+   (Pushing a `v<version>` tag does the same.)
+4. CI builds everything with the plain version (no `-test.N`), refuses to
+   go on if the Android signing secrets are missing, and the `release` job
+   (the only job with write access) creates the tag `v<version>` on that
+   commit and the release with the notes and files. It stops if the notes
+   file is missing or the release already exists.
+5. Afterwards bump `version:` in pubspec for the next work.
+
+The README "Which platforms are tested" table says which builds are tested;
+keep it up to date when a platform is tried.
 
 ## Current state (2026-11-05)
 

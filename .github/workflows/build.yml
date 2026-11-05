@@ -3,6 +3,13 @@ name: build
 # Pull requests build everything except the Windows app (test APKs come
 # from these runs). main and v* tags build everything too. To get a Windows
 # test build of a branch: Actions > build > Run workflow, tick "windows".
+#
+# Releases (see docs/HANDOVER.md, "Making a release"): Actions > build >
+# Run workflow on main with "release" ticked, or push a v<version> tag.
+# Either way the version is the one in app/pubspec.yaml (no -test suffix),
+# the APK must be signed with the release key, and the "release" job
+# creates the GitHub release v<version> with the notes from
+# docs/releases/<version>.md, the Windows zip and the APK.
 on:
   push:
     branches: [main]
@@ -14,11 +21,20 @@ on:
         description: Build the Windows app too
         type: boolean
         default: false
+      release:
+        description: Publish a GitHub release of the pubspec version (main only)
+        type: boolean
+        default: false
 
 # The repo is public: the workflow token can only read the repo. Signing
 # secrets are never passed to pull requests from forks.
 permissions:
   contents: read
+
+env:
+  # "true" only for a manual run with "release" ticked (read by
+  # tools/ci-version.sh and the release job).
+  CHIPDECK_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.release }}
 
 jobs:
   windows:
@@ -71,7 +87,7 @@ jobs:
           ./build/chipdeck-cli -t 5 -w test-tfmxst.wav tests/data/mdat.chipdeck-st-test
 
   app-windows:
-    if: github.event_name == 'push' || inputs.windows
+    if: github.event_name == 'push' || inputs.windows || inputs.release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -168,6 +184,10 @@ jobs:
           echo "ANDROID_KEYSTORE_BASE64: $([ -n "$KEYSTORE_BASE64" ] && echo set || echo missing)"
           echo "ANDROID_KEYSTORE_PASSWORD: $([ -n "$KEYSTORE_PASSWORD" ] && echo set || echo missing)"
           if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            if [ "$CHIPDECK_RELEASE" = "true" ] || [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              echo "::error::A release APK must be signed with the release key."
+              exit 1
+            fi
             echo "::warning::Signing secrets not available; APK is signed with a debug key."
             exit 0
           fi
@@ -202,3 +222,51 @@ jobs:
         with:
           name: chipdeck-app-android-${{ env.CHIPDECK_VERSION }}
           path: dist/
+
+  # Publishes the GitHub release once every build has passed. Only this job
+  # may write to the repo (it creates the tag and the release).
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
+    needs: [windows, linux, app-windows, app-linux, app-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Version
+        shell: bash
+        run: tools/ci-version.sh
+      - name: Release notes
+        run: |
+          NOTES="docs/releases/$CHIPDECK_VERSION.md"
+          if [ ! -f "$NOTES" ]; then
+            echo "::error::Write $NOTES before releasing."
+            exit 1
+          fi
+          echo "NOTES=$NOTES" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chipdeck-app-*-${{ env.CHIPDECK_VERSION }}
+          path: artifacts
+      - name: Package
+        run: |
+          V="$CHIPDECK_VERSION"
+          mkdir -p release
+          (cd "artifacts/chipdeck-app-windows-x64-$V" && zip -qr "$GITHUB_WORKSPACE/release/ChipDeck-$V-windows-x64.zip" "ChipDeck-$V")
+          cp "artifacts/chipdeck-app-android-$V/ChipDeck-$V.apk" "release/ChipDeck-$V-android.apk"
+          (cd release && sha256sum * > "ChipDeck-$V-SHA256SUMS.txt")
+          ls -l release
+          cat release/*SHA256SUMS.txt
+      - name: Publish
+        run: |
+          V="$CHIPDECK_VERSION"
+          if gh release view "v$V" > /dev/null 2>&1; then
+            echo "::error::Release v$V already exists. Bump the version in app/pubspec.yaml."
+            exit 1
+          fi
+          gh release create "v$V" release/* \
+            --target "$GITHUB_SHA" \
+            --title "ChipDeck $V" \
+            --notes-file "$NOTES"
