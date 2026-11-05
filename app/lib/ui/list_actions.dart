@@ -86,50 +86,45 @@ class AddToListButton extends StatelessWidget {
   }
 }
 
-/// Menu entries for picking a list to add to; 'new' asks for a name.
+/// Menu entries for picking a list to add to: the Playlist, Favourites
+/// (when [showFavourites]), the playlists used most recently, "Choose a
+/// playlist…" (all of them, by folder) and "New playlist…".
 List<PopupMenuEntry<String>> listMenuItems(
   PlayerController c, {
   String? except,
   bool showFavourites = false,
-}) => [
-  if (except != mainListId)
-    const PopupMenuItem(
-      value: mainListId,
-      child: ListTile(
-        dense: true,
-        leading: Icon(Icons.queue_music),
-        title: Text('Playlist'),
-      ),
-    ),
-  if (showFavourites && except != favouritesId)
-    const PopupMenuItem(
-      value: favouritesId,
-      child: ListTile(
-        dense: true,
-        leading: Icon(Icons.star_rounded, color: Palette.star),
-        title: Text('Favourites'),
-      ),
-    ),
-  for (final pl in c.collections.playlists)
-    if (pl.id != except)
-      PopupMenuItem(
-        value: pl.id,
-        child: ListTile(
-          dense: true,
-          leading: const Icon(Icons.playlist_play),
-          title: Text(pl.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
-      ),
-  const PopupMenuDivider(),
-  const PopupMenuItem(
-    value: 'new',
+}) {
+  PopupMenuItem<String> item(
+    String v,
+    IconData icon,
+    String text, {
+    Color? color,
+  }) => PopupMenuItem(
+    value: v,
     child: ListTile(
       dense: true,
-      leading: Icon(Icons.add),
-      title: Text('New playlist…'),
+      leading: Icon(icon, color: color),
+      title: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
     ),
-  ),
-];
+  );
+  final recent = [
+    for (final id in c.recentLists)
+      if (id != except && c.collections.byId(id) != null) id,
+  ];
+  final others = c.collections.playlists.any(
+    (p) => p.id != except && !recent.contains(p.id),
+  );
+  return [
+    if (except != mainListId) item(mainListId, Icons.queue_music, 'Playlist'),
+    if (showFavourites && except != favouritesId)
+      item(favouritesId, Icons.star_rounded, 'Favourites', color: Palette.star),
+    for (final id in recent) item(id, Icons.playlist_play, c.listName(id)),
+    if (others)
+      item('choose', Icons.folder_open_outlined, 'Choose a playlist…'),
+    const PopupMenuDivider(),
+    item('new', Icons.add, 'New playlist…'),
+  ];
+}
 
 /// Adds [items] to the list picked from [listMenuItems] and says so.
 Future<void> addToListPicked(
@@ -140,6 +135,16 @@ Future<void> addToListPicked(
 ) async {
   if (items.isEmpty) return;
   final messenger = ScaffoldMessenger.of(context);
+  String? folder;
+  if (id == 'choose') {
+    final picked = await choosePlaylist(context, c);
+    if (picked == null || !context.mounted) return;
+    id = picked;
+    if (id.startsWith('new:')) {
+      folder = id.length > 4 ? id.substring(4) : null;
+      id = 'new';
+    }
+  }
   if (id == 'new') {
     final name = await askName(
       context,
@@ -148,7 +153,7 @@ Future<void> addToListPicked(
       confirm: 'Create',
     );
     if (name == null) return;
-    id = c.createPlaylist(name, items);
+    id = c.createPlaylist(name, items, folder);
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -274,4 +279,186 @@ Future<bool> confirmAction(
     ),
   );
   return ok ?? false;
+}
+
+/// Lets the user pick one of their playlists, browsing folders or
+/// searching by name. Returns its id, `new:FOLDER_ID` for "New playlist
+/// here" (`new:` at the top level), or null when cancelled.
+Future<String?> choosePlaylist(BuildContext context, PlayerController c) =>
+    showDialog<String>(
+      context: context,
+      builder: (_) => _PlaylistChooser(controller: c),
+    );
+
+class _PlaylistChooser extends StatefulWidget {
+  const _PlaylistChooser({required this.controller});
+  final PlayerController controller;
+
+  @override
+  State<_PlaylistChooser> createState() => _PlaylistChooserState();
+}
+
+class _PlaylistChooserState extends State<_PlaylistChooser> {
+  String? _folder;
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final col = widget.controller.collections;
+    final q = _query.trim().toLowerCase();
+    final folder = col.folderById(_folder);
+    final rows = <Widget>[];
+    if (q.isNotEmpty) {
+      final hits =
+          col.playlists.where((p) => p.name.toLowerCase().contains(q)).toList()
+            ..sort(
+              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+            );
+      for (final p in hits) {
+        rows.add(_playlistTile(p, col.folderLabel(p.folder)));
+      }
+    } else {
+      if (folder != null) {
+        rows.add(
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.arrow_upward),
+            title: const Text('Up'),
+            onTap: () => setState(() => _folder = folder.parent),
+          ),
+        );
+      }
+      for (final f in col.foldersIn(_folder)) {
+        rows.add(
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.folder_outlined, color: Palette.warm),
+            title: Text(f.name),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => setState(() => _folder = f.id),
+          ),
+        );
+      }
+      for (final p in col.playlistsIn(_folder)) {
+        rows.add(_playlistTile(p, null));
+      }
+    }
+    return AlertDialog(
+      title: Text(folder == null ? 'Add to playlist' : folder.name),
+      contentPadding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+      content: SizedBox(
+        width: 420,
+        height: 420,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: TextField(
+                autofocus: true,
+                onChanged: (v) => setState(() => _query = v),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  prefixIcon: Icon(Icons.search, size: 20),
+                  hintText: 'Search playlists',
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: rows.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No playlists here.',
+                        style: TextStyle(color: Palette.textMuted),
+                      ),
+                    )
+                  : ListView(children: rows),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton.icon(
+          icon: const Icon(Icons.add),
+          label: const Text('New playlist here'),
+          onPressed: () => Navigator.pop(context, 'new:${_folder ?? ''}'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+
+  Widget _playlistTile(UserPlaylist p, String? where) => ListTile(
+    dense: true,
+    leading: const Icon(Icons.playlist_play),
+    title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+    subtitle: (where ?? '').isEmpty ? null : Text(where!),
+    trailing: Text(
+      '${p.paths.length}',
+      style: const TextStyle(color: Palette.textMuted, fontFeatures: tabular),
+    ),
+    onTap: () => Navigator.pop(context, p.id),
+  );
+}
+
+/// Asks which folder to move something into. Returns the folder id, ''
+/// for the top level, or null when cancelled. [moving] (a folder id) and
+/// the folders inside it are left out, so a folder can't go inside itself.
+Future<String?> pickFolder(
+  BuildContext context,
+  PlayerController c, {
+  required String title,
+  String? current,
+  String? moving,
+}) {
+  final col = c.collections;
+  final tree = [
+    for (final (f, depth) in col.folderTree())
+      if (moving == null || !col.folderPath(f.id).any((x) => x.id == moving))
+        (f, depth),
+  ];
+  Widget option(String value, String name, int depth, IconData icon) {
+    final here = value == (current ?? '');
+    return SimpleDialogOption(
+      onPressed: here ? null : () => Navigator.pop(context, value),
+      padding: EdgeInsets.fromLTRB(24.0 + depth * 20, 10, 24, 10),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: here ? Palette.textMuted : Palette.warm),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              here ? '$name (here now)' : name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: here ? Palette.textMuted : null),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  return showDialog<String>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: Text(title),
+      children: [
+        option('', 'Top level', 0, Icons.home_outlined),
+        for (final (f, depth) in tree)
+          option(f.id, f.name, depth + 1, Icons.folder_outlined),
+        if (tree.isEmpty)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 8, 24, 8),
+            child: Text(
+              'No folders yet: make one with "New folder…" in Playlists.',
+              style: TextStyle(color: Palette.textMuted),
+            ),
+          ),
+      ],
+    ),
+  );
 }

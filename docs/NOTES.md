@@ -661,6 +661,26 @@ release build under Xvfb at 1600x900 and 960x540 with seeded preferences:
 picker menu, row menu, restore of the shown list and of the tune last
 played from Favourites. Screenshots: docs/screenshots/playlists-*.png.
 Not checked here: Windows (CI build only) and Android (CI APK).
+
+### Playlist browser and folders (2026-11-05, same PR)
+
+Stephen tried 0.11.0-test.97 ("I like it") and asked for the playlists
+side to show the list of playlists by default instead of the header
+drop-down ("will get unwieldy quickly"), and for playlist folders.
+
+- `shownList` now also takes `home` (the browser) and `dir:<folder id>`
+  (a folder). The panel always starts on `home`; it is no longer saved.
+  `parentView` gives the back target (a list's folder, else home).
+- Folders (`PlaylistFolder`: id, name, parent) nest without a depth limit.
+  Loops are refused when moving (`moveFolder`) and repaired on load, as are
+  links to missing folders. Deleting a folder moves its children up.
+- Browser order: Playlist, Favourites, then sub-folders and playlists of
+  the current folder, each sorted by name (case-insensitive).
+- Add menus would grow with every playlist, so they show only the five
+  most recently used (`recentLists`, saved) plus "Choose a playlist…".
+- Tests: 20 pass (3 new: folders, folder persistence/repair, browser
+  navigation and recent lists). Linux build checked under Xvfb at
+  1600x900 and 960x540 (browser, nested folder, chooser dialog).
 ### Library refresh getting stuck (2026-11-05, 0.10.1)
 
 Stephen: the 0.10.0 build "got stuck" scanning new locations and showed

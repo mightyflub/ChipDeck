@@ -11,24 +11,48 @@ const mainListId = 'main';
 /// Id of the favourites list.
 const favouritesId = 'fav';
 
+/// The Playlists panel's home view: the list of lists.
+const homeId = 'home';
+
+/// The view id that shows folder [id] in the Playlists panel.
+String folderView(String id) => 'dir:$id';
+
+/// The folder id of a [folderView] id, or null for other views.
+String? folderOfView(String view) =>
+    view.startsWith('dir:') ? view.substring(4) : null;
+
 /// A named playlist the user made.
 class UserPlaylist {
-  UserPlaylist({required this.id, required this.name, List<String>? paths})
-    : paths = paths ?? [];
+  UserPlaylist({
+    required this.id,
+    required this.name,
+    List<String>? paths,
+    this.folder,
+  }) : paths = paths ?? [];
 
   final String id;
   String name;
   final List<String> paths;
 
-  Map<String, Object> toJson() => {'id': id, 'name': name, 'paths': paths};
+  /// The folder it is in (a [PlaylistFolder] id), or null for the top level.
+  String? folder;
+
+  Map<String, Object> toJson() => {
+    'id': id,
+    'name': name,
+    'paths': paths,
+    'folder': ?folder,
+  };
 
   static UserPlaylist? fromJson(Object? j) {
     if (j is! Map) return null;
     final id = j['id'], name = j['name'], paths = j['paths'];
     if (id is! String || name is! String || paths is! List) return null;
+    final folder = j['folder'];
     return UserPlaylist(
       id: id,
       name: name,
+      folder: folder is String ? folder : null,
       paths: [
         for (final x in paths)
           if (x is String) x,
@@ -37,12 +61,170 @@ class UserPlaylist {
   }
 }
 
+/// A folder of playlists (and of other folders).
+class PlaylistFolder {
+  PlaylistFolder({required this.id, required this.name, this.parent});
+
+  final String id;
+  String name;
+
+  /// The folder it is in, or null for the top level.
+  String? parent;
+
+  Map<String, Object> toJson() => {'id': id, 'name': name, 'parent': ?parent};
+
+  static PlaylistFolder? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final id = j['id'], name = j['name'], parent = j['parent'];
+    if (id is! String || name is! String) return null;
+    return PlaylistFolder(
+      id: id,
+      name: name,
+      parent: parent is String ? parent : null,
+    );
+  }
+}
+
+int _byName(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
+
 /// Favourites (ordered, no duplicates) and user playlists, with the plain
 /// list operations. No Flutter or file access, so it is easy to test.
 class Collections {
   final List<String> favourites = [];
   final Set<String> _favSet = {};
   final List<UserPlaylist> playlists = [];
+  final List<PlaylistFolder> folders = [];
+
+  static String _newId(String prefix) =>
+      '$prefix${DateTime.now().microsecondsSinceEpoch}';
+
+  // ------------------------------------------------------------ folders
+  PlaylistFolder? folderById(String? id) {
+    if (id == null) return null;
+    for (final f in folders) {
+      if (f.id == id) return f;
+    }
+    return null;
+  }
+
+  /// Folders directly inside [parent] (null: the top level), by name.
+  List<PlaylistFolder> foldersIn(String? parent) =>
+      folders.where((f) => f.parent == parent).toList()
+        ..sort((a, b) => _byName(a.name, b.name));
+
+  /// Playlists directly inside [folder] (null: the top level), by name.
+  List<UserPlaylist> playlistsIn(String? folder) =>
+      playlists.where((p) => p.folder == folder).toList()
+        ..sort((a, b) => _byName(a.name, b.name));
+
+  /// Folders from the top level down to [id] (empty for the top level).
+  List<PlaylistFolder> folderPath(String? id) {
+    final out = <PlaylistFolder>[];
+    final seen = <String>{};
+    var f = folderById(id);
+    while (f != null && seen.add(f.id)) {
+      out.insert(0, f);
+      f = folderById(f.parent);
+    }
+    return out;
+  }
+
+  /// "Folder / Sub folder" for [id], or '' for the top level.
+  String folderLabel(String? id) =>
+      folderPath(id).map((f) => f.name).join(' / ');
+
+  /// Playlists in [id] and all folders below it.
+  int playlistCountUnder(String id) {
+    final inside = <String>{id};
+    var grew = true;
+    while (grew) {
+      grew = false;
+      for (final f in folders) {
+        if (f.parent != null && inside.contains(f.parent) && inside.add(f.id)) {
+          grew = true;
+        }
+      }
+    }
+    return playlists.where((p) => inside.contains(p.folder)).length;
+  }
+
+  /// Every folder in tree order, with its depth (for pickers).
+  List<(PlaylistFolder, int)> folderTree() {
+    final out = <(PlaylistFolder, int)>[];
+    void walk(String? parent, int depth) {
+      for (final f in foldersIn(parent)) {
+        out.add((f, depth));
+        walk(f.id, depth + 1);
+      }
+    }
+
+    walk(null, 0);
+    return out;
+  }
+
+  PlaylistFolder createFolder(String name, {String? parent}) {
+    final used = {
+      for (final f in foldersIn(folderById(parent)?.id)) f.name.toLowerCase(),
+    };
+    var n = name.trim().isEmpty ? 'New folder' : name.trim();
+    if (used.contains(n.toLowerCase())) {
+      final base = n;
+      for (var i = 2; used.contains(n.toLowerCase()); i++) {
+        n = '$base $i';
+      }
+    }
+    final f = PlaylistFolder(
+      id: _newId('fd'),
+      name: n,
+      parent: folderById(parent)?.id,
+    );
+    folders.add(f);
+    return f;
+  }
+
+  bool renameFolder(String id, String name) {
+    final f = folderById(id);
+    if (f == null || name.trim().isEmpty) return false;
+    f.name = name.trim();
+    return true;
+  }
+
+  /// Deletes a folder. Its playlists and folders move up to its parent, so
+  /// nothing the user made is lost.
+  bool deleteFolder(String id) {
+    final f = folderById(id);
+    if (f == null) return false;
+    for (final c in folders) {
+      if (c.parent == id) c.parent = f.parent;
+    }
+    for (final p in playlists) {
+      if (p.folder == id) p.folder = f.parent;
+    }
+    folders.remove(f);
+    return true;
+  }
+
+  /// Moves a playlist into [folder] (null: the top level).
+  bool movePlaylist(String id, String? folder) {
+    final p = byId(id);
+    if (p == null || (folder != null && folderById(folder) == null)) {
+      return false;
+    }
+    p.folder = folder;
+    return true;
+  }
+
+  /// Moves a folder into [parent] (null: the top level). Refuses to move a
+  /// folder into itself or into one of its own folders.
+  bool moveFolder(String id, String? parent) {
+    final f = folderById(id);
+    if (f == null || (parent != null && folderById(parent) == null)) {
+      return false;
+    }
+    if (folderPath(parent).any((x) => x.id == id)) return false;
+    f.parent = parent;
+    return true;
+  }
 
   bool isFavourite(String path) => _favSet.contains(path);
 
@@ -78,10 +260,15 @@ class Collections {
     }
   }
 
-  UserPlaylist create(String name, {List<String> paths = const []}) {
+  UserPlaylist create(
+    String name, {
+    List<String> paths = const [],
+    String? folder,
+  }) {
     final pl = UserPlaylist(
-      id: 'pl${DateTime.now().microsecondsSinceEpoch}',
+      id: _newId('pl'),
       name: name.trim().isEmpty ? uniqueName('New playlist') : name.trim(),
+      folder: folderById(folder)?.id,
     );
     _addPaths(pl.paths, paths);
     playlists.add(pl);
@@ -164,7 +351,9 @@ class Collections {
   String playlistsToPrefs() =>
       jsonEncode([for (final pl in playlists) pl.toJson()]);
 
-  void load({List<String>? favourites, String? playlists}) {
+  String foldersToPrefs() => jsonEncode([for (final f in folders) f.toJson()]);
+
+  void load({List<String>? favourites, String? playlists, String? folders}) {
     this.favourites.clear();
     _favSet.clear();
     addTo(favouritesId, favourites ?? const []);
@@ -179,6 +368,36 @@ class Collections {
           }
         }
       } catch (_) {}
+    }
+    this.folders.clear();
+    if (folders != null) {
+      try {
+        final j = jsonDecode(folders);
+        if (j is List) {
+          for (final x in j) {
+            final f = PlaylistFolder.fromJson(x);
+            if (f != null && folderById(f.id) == null) this.folders.add(f);
+          }
+        }
+      } catch (_) {}
+    }
+    // Repair links to folders that no longer exist, and folder loops.
+    for (final f in this.folders) {
+      if (folderById(f.parent) == null) f.parent = null;
+    }
+    for (final f in this.folders) {
+      final seen = <String>{f.id};
+      var p = folderById(f.parent);
+      while (p != null) {
+        if (!seen.add(p.id)) {
+          f.parent = null;
+          break;
+        }
+        p = folderById(p.parent);
+      }
+    }
+    for (final p in this.playlists) {
+      if (folderById(p.folder) == null) p.folder = null;
     }
   }
 }

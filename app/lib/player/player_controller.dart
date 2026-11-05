@@ -13,7 +13,15 @@ import '../hvsc/stil.dart';
 import '../native/chipdeck_ffi.dart';
 import 'collections.dart';
 
-export 'collections.dart' show mainListId, favouritesId, UserPlaylist;
+export 'collections.dart'
+    show
+        mainListId,
+        favouritesId,
+        homeId,
+        folderView,
+        folderOfView,
+        UserPlaylist,
+        PlaylistFolder;
 
 /// File extensions the core can play.
 const supportedExtensions = {
@@ -119,9 +127,14 @@ class PlayerController extends ChangeNotifier {
   /// Favourites and the user's own playlists.
   final collections = Collections();
 
-  /// Which list the playlist panel shows: [mainListId], [favouritesId] or
-  /// a user playlist id.
-  String shownList = mainListId;
+  /// What the Playlists panel shows: [homeId] (the list of playlists), a
+  /// folder ([folderView] of its id), or a list: [mainListId],
+  /// [favouritesId] or a user playlist id.
+  String shownList = homeId;
+
+  /// Lists tunes were added to most recently (first = newest), offered
+  /// first in the "add to" menus.
+  final List<String> recentLists = [];
 
   /// Looks up a tune's details in the library index (set in main.dart),
   /// so favourites and playlists show titles without probing the files.
@@ -233,11 +246,16 @@ class PlayerController extends ChangeNotifier {
     collections.load(
       favourites: _prefs.getStringList('favourites'),
       playlists: _prefs.getString('userPlaylists'),
+      folders: _prefs.getString('playlistFolders'),
     );
-    final shown = _prefs.getString('shownList') ?? mainListId;
-    shownList = shown == mainListId || collections.pathsOf(shown) != null
-        ? shown
-        : mainListId;
+    recentLists.addAll(
+      (_prefs.getStringList('recentLists') ?? const []).where(
+        (id) => collections.byId(id) != null,
+      ),
+    );
+    // The Playlists panel always starts on the list of playlists
+    // (Stephen, 2026-11-05).
+    shownList = homeId;
     final saved = _prefs.getStringList('playlist') ?? const [];
     addFiles(saved.where((f) => File(f).existsSync()).toList(), persist: false);
     final lastTune = _prefs.getString('lastTune');
@@ -477,12 +495,81 @@ class PlayerController extends ChangeNotifier {
     _ => collections.byId(id)?.name ?? 'Playlist',
   };
 
+  /// Whether [id] is a list of tunes (not the browser or a folder).
+  bool isTuneList(String id) =>
+      id == mainListId || collections.pathsOf(id) != null;
+
+  bool _validView(String id) {
+    if (id == homeId || isTuneList(id)) return true;
+    final f = folderOfView(id);
+    return f != null && collections.folderById(f) != null;
+  }
+
+  /// Shows the browser ([homeId]), a folder ([folderView]) or a list.
   void showList(String id) {
-    if (id != mainListId && collections.pathsOf(id) == null) id = mainListId;
+    if (!_validView(id)) id = homeId;
     if (shownList == id) return;
     shownList = id;
-    _prefs.setString('shownList', id);
     notifyListeners();
+  }
+
+  /// Where "back" goes from [view]: a list or folder's folder, else home.
+  String parentView(String view) {
+    final String? folder;
+    if (folderOfView(view) case final f?) {
+      folder = collections.folderById(f)?.parent;
+    } else {
+      folder = collections.byId(view)?.folder;
+    }
+    return folder == null ? homeId : folderView(folder);
+  }
+
+  void _touchRecent(String id) {
+    if (collections.byId(id) == null) return;
+    recentLists
+      ..remove(id)
+      ..insert(0, id);
+    if (recentLists.length > 5) recentLists.removeRange(5, recentLists.length);
+    _prefs.setStringList('recentLists', recentLists);
+  }
+
+  String createFolder(String name, {String? parent}) {
+    final f = collections.createFolder(name, parent: parent);
+    _saveCollections();
+    notifyListeners();
+    return f.id;
+  }
+
+  void renameFolder(String id, String name) {
+    if (collections.renameFolder(id, name)) {
+      _saveCollections();
+      notifyListeners();
+    }
+  }
+
+  /// Deletes a folder; what was in it moves up a level.
+  void deleteFolder(String id) {
+    final up = parentView(folderView(id));
+    if (!collections.deleteFolder(id)) return;
+    if (shownList == folderView(id)) showList(up);
+    _saveCollections();
+    notifyListeners();
+  }
+
+  void movePlaylist(String id, String? folder) {
+    if (collections.movePlaylist(id, folder)) {
+      _saveCollections();
+      notifyListeners();
+    }
+  }
+
+  bool moveFolder(String id, String? parent) {
+    final ok = collections.moveFolder(id, parent);
+    if (ok) {
+      _saveCollections();
+      notifyListeners();
+    }
+    return ok;
   }
 
   /// Entries (with details where known) for a collection's tunes. Tunes
@@ -531,6 +618,7 @@ class PlayerController extends ChangeNotifier {
   void _saveCollections() {
     _prefs.setStringList('favourites', collections.favouritesToPrefs());
     _prefs.setString('userPlaylists', collections.playlistsToPrefs());
+    _prefs.setString('playlistFolders', collections.foldersToPrefs());
   }
 
   bool isFavourite(String path) => collections.isFavourite(path);
@@ -566,6 +654,7 @@ class PlayerController extends ChangeNotifier {
       return playlist.length - before;
     }
     _seed(items);
+    _touchRecent(id);
     final n = collections.addTo(id, [for (final (path, _) in items) path]);
     _syncQueue(id);
     _saveCollections();
@@ -577,12 +666,15 @@ class PlayerController extends ChangeNotifier {
   String createPlaylist(
     String name, [
     List<(String, TuneInfo?)> items = const [],
+    String? folder,
   ]) {
     _seed(items);
     final pl = collections.create(
       name,
       paths: [for (final (path, _) in items) path],
+      folder: folder,
     );
+    _touchRecent(pl.id);
     _saveCollections();
     notifyListeners();
     return pl.id;
@@ -600,8 +692,12 @@ class PlayerController extends ChangeNotifier {
   }
 
   void deletePlaylist(String id) {
+    final up = parentView(id);
     if (!collections.delete(id)) return;
-    if (shownList == id) showList(mainListId);
+    if (shownList == id) showList(up);
+    if (recentLists.remove(id)) {
+      _prefs.setStringList('recentLists', recentLists);
+    }
     if (_queueSource == id) _queueSource = null; // keeps playing its copy
     _saveCollections();
     notifyListeners();

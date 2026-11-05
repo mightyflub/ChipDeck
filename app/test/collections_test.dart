@@ -46,6 +46,51 @@ void main() {
       expect(c.create('').name, 'New playlist');
     });
 
+    test('folders: nest, move, refuse loops, delete moves contents up', () {
+      final c = Collections();
+      final a = c.createFolder('Composers');
+      final b = c.createFolder('Hubbard', parent: a.id);
+      expect(c.createFolder('Composers').name, 'Composers 2');
+      final pl = c.create('Commando mix', folder: b.id);
+      final top = c.create('Loose');
+      expect(c.foldersIn(null).map((f) => f.name), [
+        'Composers',
+        'Composers 2',
+      ]);
+      expect(c.playlistsIn(b.id).single.id, pl.id);
+      expect(c.playlistsIn(null).single.id, top.id);
+      expect(c.folderLabel(b.id), 'Composers / Hubbard');
+      expect(c.playlistCountUnder(a.id), 1);
+      expect(c.moveFolder(a.id, b.id), isFalse); // into its own sub folder
+      expect(c.moveFolder(a.id, a.id), isFalse);
+      expect(c.movePlaylist(top.id, a.id), isTrue);
+      expect(c.playlistCountUnder(a.id), 2);
+      expect(c.deleteFolder(a.id), isTrue);
+      expect(b.parent, isNull);
+      expect(top.folder, isNull);
+      expect(pl.folder, b.id);
+      expect(c.playlists.length, 2);
+    });
+
+    test('folders survive a round trip and broken links are repaired', () {
+      final c = Collections();
+      final a = c.createFolder('A');
+      c.create('P', folder: a.id);
+      final d = Collections()
+        ..load(playlists: c.playlistsToPrefs(), folders: c.foldersToPrefs());
+      expect(d.playlists.single.folder, a.id);
+      expect(d.folders.single.name, 'A');
+      final e = Collections()
+        ..load(
+          playlists: c.playlistsToPrefs(),
+          folders:
+              '[{"id":"x","name":"X","parent":"y"},'
+              '{"id":"y","name":"Y","parent":"x"}]',
+        );
+      expect(e.playlists.single.folder, isNull); // folder A is gone
+      expect(e.folders.where((f) => f.parent == null), isNotEmpty);
+    });
+
     test('round trip through preferences, ignoring junk', () {
       final c = Collections();
       c.toggleFavourite('/f.ym');
@@ -109,20 +154,35 @@ void main() {
       final d = await make(saved);
       expect(d.collections.favourites, [tunes[0]]);
       expect(d.collections.byId(id)!.paths, [tunes[1]]);
-      expect(d.shownList, id);
+      expect(d.shownList, homeId); // always starts on the list of lists
     });
 
-    test(
-      'deleting the shown playlist goes back to the main playlist',
-      () async {
-        final c = await make();
-        final id = c.createPlaylist('Gone');
-        c.showList(id);
-        c.deletePlaylist(id);
-        expect(c.shownList, mainListId);
-        expect(c.collections.playlists, isEmpty);
-      },
-    );
+    test('deleting the shown playlist goes back to the browser', () async {
+      final c = await make();
+      final id = c.createPlaylist('Gone');
+      c.showList(id);
+      c.deletePlaylist(id);
+      expect(c.shownList, homeId);
+      expect(c.collections.playlists, isEmpty);
+    });
+
+    test('browser views: back goes to the folder, recent lists', () async {
+      final c = await make();
+      expect(c.shownList, homeId);
+      final f = c.createFolder('Mixes');
+      final id = c.createPlaylist('Party', const [], f);
+      c.showList(id);
+      expect(c.parentView(id), folderView(f));
+      expect(c.parentView(folderView(f)), homeId);
+      expect(c.parentView(favouritesId), homeId);
+      c.showList(folderView(f));
+      c.deleteFolder(f);
+      expect(c.shownList, homeId);
+      expect(c.collections.byId(id)!.folder, isNull);
+      final other = c.createPlaylist('Other');
+      c.addToList(id, [(tunes[0], null)]);
+      expect(c.recentLists.take(2), [id, other]);
+    });
 
     test('save the playlist as a named playlist', () async {
       final c = await make();

@@ -41,19 +41,137 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
     super.dispose();
   }
 
-  void _show(String id) async {
-    if (id == 'new') {
-      final name = await askName(
-        context,
-        title: 'New playlist',
-        initial: c.collections.uniqueName('New playlist'),
-        confirm: 'Create',
-      );
-      if (name == null) return;
-      id = c.createPlaylist(name);
-    }
-    c.showList(id);
+  /// Shows another view (the browser, a folder or a list), with a fresh
+  /// search.
+  void _open(String view) {
+    setState(() {
+      _search.clear();
+      _query = '';
+    });
+    c.showList(view);
     if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  void _say(String s) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(content: Text(s), duration: const Duration(seconds: 2)),
+    );
+
+  /// The folder shown in the browser (null: the top level).
+  String? get _browsedFolder => folderOfView(c.shownList);
+
+  Future<void> _newPlaylist({String? folder, bool open = true}) async {
+    final name = await askName(
+      context,
+      title: 'New playlist',
+      initial: c.collections.uniqueName('New playlist'),
+      confirm: 'Create',
+    );
+    if (name == null) return;
+    final id = c.createPlaylist(name, const [], folder);
+    if (open) _open(id);
+  }
+
+  Future<void> _newFolder(String? parent) async {
+    final name = await askName(
+      context,
+      title: 'New folder',
+      initial: 'New folder',
+      confirm: 'Create',
+    );
+    if (name != null) c.createFolder(name, parent: parent);
+  }
+
+  /// Actions on a playlist from the browser (or from its own header).
+  Future<void> _playlistAction(String id, String v) async {
+    final name = c.listName(id);
+    switch (v) {
+      case 'play':
+        if (id == mainListId) {
+          if (c.playlist.isNotEmpty) c.playIndex(0);
+        } else if ((c.collections.pathsOf(id) ?? const []).isNotEmpty) {
+          c.playList(id, 0);
+        } else {
+          _say('"$name" is empty.');
+          return;
+        }
+        widget.onPlayed?.call();
+      case 'toPlaylist':
+        final n = c.addListToPlaylist(id);
+        _say(
+          n == 0
+              ? 'Those tunes are already in the playlist.'
+              : 'Added $n tunes to the playlist.',
+        );
+      case 'rename':
+        final n = await askName(
+          context,
+          title: 'Rename playlist',
+          initial: name,
+          confirm: 'Rename',
+        );
+        if (n != null) c.renamePlaylist(id, n);
+      case 'move':
+        final to = await pickFolder(
+          context,
+          c,
+          title: 'Move "$name" to',
+          current: c.collections.byId(id)?.folder,
+        );
+        if (to != null) {
+          c.movePlaylist(id, to.isEmpty ? null : to);
+          final where = to.isEmpty
+              ? 'the top level'
+              : c.collections.folderLabel(to);
+          _say('Moved "$name" to $where.');
+        }
+      case 'delete':
+        if (await confirmAction(
+          context,
+          title: 'Delete "$name"?',
+          message: 'The playlist goes; the tunes stay where they are.',
+          confirm: 'Delete',
+        )) {
+          c.deletePlaylist(id);
+        }
+    }
+  }
+
+  Future<void> _folderAction(String id, String v) async {
+    final f = c.collections.folderById(id);
+    if (f == null) return;
+    switch (v) {
+      case 'rename':
+        final n = await askName(
+          context,
+          title: 'Rename folder',
+          initial: f.name,
+          confirm: 'Rename',
+        );
+        if (n != null) c.renameFolder(id, n);
+      case 'move':
+        final to = await pickFolder(
+          context,
+          c,
+          title: 'Move "${f.name}" to',
+          current: f.parent,
+          moving: id,
+        );
+        if (to != null) c.moveFolder(id, to.isEmpty ? null : to);
+      case 'delete':
+        final n = c.collections.playlistCountUnder(id);
+        if (await confirmAction(
+          context,
+          title: 'Delete folder "${f.name}"?',
+          message: n == 0
+              ? 'The folder is empty.'
+              : 'Its playlists and folders are kept: they move up a level.',
+          confirm: 'Delete',
+        )) {
+          c.deleteFolder(id);
+        }
+    }
   }
 
   Future<void> _action(String v) async {
@@ -87,23 +205,8 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
               ? 'Those tunes are already in the playlist.'
               : 'Added $n tunes to the playlist.',
         );
-      case 'rename':
-        final n = await askName(
-          context,
-          title: 'Rename playlist',
-          initial: name,
-          confirm: 'Rename',
-        );
-        if (n != null) c.renamePlaylist(id, n);
-      case 'delete':
-        if (await confirmAction(
-          context,
-          title: 'Delete "$name"?',
-          message: 'The playlist goes; the tunes stay where they are.',
-          confirm: 'Delete',
-        )) {
-          c.deletePlaylist(id);
-        }
+      case 'rename' || 'move' || 'delete':
+        await _playlistAction(id, v);
       case 'clear':
         if (id == mainListId) {
           c.clearPlaylist();
@@ -137,6 +240,7 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
         listenable: c,
         builder: (context, _) {
           final id = c.shownList;
+          if (!c.isTuneList(id)) return _browser();
           final isMain = id == mainListId;
           final entries = isMain ? c.playlist : c.collectionEntries(id);
           final q = _query.toLowerCase();
@@ -163,12 +267,17 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
                         : const EdgeInsets.fromLTRB(8, 10, 8, 6),
                     child: Row(
                       children: [
+                        IconButton(
+                          tooltip: 'Back to the playlists',
+                          icon: const Icon(Icons.arrow_back),
+                          onPressed: () => _open(c.parentView(id)),
+                        ),
                         if (compact && showSearch) ...[
                           Flexible(
                             flex: 2,
-                            child: _ListPicker(
+                            child: _ListTitle(
                               controller: c,
-                              onPicked: _show,
+                              id: id,
                               compact: true,
                               count: entries.length,
                             ),
@@ -177,14 +286,11 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
                           Expanded(flex: 3, child: _searchField()),
                         ] else
                           Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: _ListPicker(
-                                controller: c,
-                                onPicked: _show,
-                                compact: compact,
-                                count: entries.length,
-                              ),
+                            child: _ListTitle(
+                              controller: c,
+                              id: id,
+                              compact: compact,
+                              count: entries.length,
                             ),
                           ),
                         IconButton(
@@ -238,6 +344,234 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
     );
   }
 
+  /// The list of playlists: Playlist and Favourites at the top, then the
+  /// folders and playlists of the folder being browsed. The search box
+  /// finds playlists and folders by name anywhere.
+  Widget _browser() {
+    final col = c.collections;
+    final folderId = _browsedFolder;
+    final folder = col.folderById(folderId);
+    final q = _query.trim().toLowerCase();
+    final rows = <Widget>[];
+    if (q.isNotEmpty) {
+      for (final f in col.folders) {
+        if (f.name.toLowerCase().contains(q)) rows.add(_folderRow(f, true));
+      }
+      final hits =
+          col.playlists.where((p) => p.name.toLowerCase().contains(q)).toList()
+            ..sort(
+              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+            );
+      for (final p in hits) {
+        rows.add(_playlistRow(p.id, true));
+      }
+    } else {
+      if (folder == null) {
+        rows
+          ..add(_playlistRow(mainListId, false))
+          ..add(_playlistRow(favouritesId, false));
+        if (col.folders.isNotEmpty || col.playlists.isNotEmpty) {
+          rows.add(const Divider(height: 1, indent: 16, endIndent: 16));
+        }
+      }
+      for (final f in col.foldersIn(folderId)) {
+        rows.add(_folderRow(f, false));
+      }
+      for (final p in col.playlistsIn(folderId)) {
+        rows.add(_playlistRow(p.id, false));
+      }
+    }
+    final empty = rows.isEmpty
+        ? Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              q.isNotEmpty ? 'No playlists or folders match.' : 'This folder is empty. Make a playlist here with +, or move one in from its menu.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Palette.textMuted),
+            ),
+          )
+        : null;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final compact = box.maxHeight < 480;
+        final t = Theme.of(context).textTheme;
+        final path = col.folderLabel(folder?.parent);
+        final title = Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              folder?.name ?? 'Playlists',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: compact ? t.titleSmall : t.titleMedium,
+            ),
+            if (folder != null && path.isNotEmpty && !compact)
+              Text(
+                path,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Palette.textMuted, fontSize: 11),
+              ),
+          ],
+        );
+        return Column(
+          children: [
+            Padding(
+              padding: compact
+                  ? const EdgeInsets.fromLTRB(4, 6, 4, 6)
+                  : const EdgeInsets.fromLTRB(8, 10, 8, 6),
+              child: Row(
+                children: [
+                  if (folder != null)
+                    IconButton(
+                      tooltip: 'Up a level',
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => _open(c.parentView(c.shownList)),
+                    )
+                  else
+                    const SizedBox(width: 8),
+                  if (compact) ...[
+                    Flexible(flex: 2, child: title),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      flex: 3,
+                      child: _searchField(hint: 'Search playlists'),
+                    ),
+                  ] else
+                    Expanded(child: title),
+                  IconButton(
+                    tooltip: 'New playlist',
+                    icon: const Icon(Icons.add),
+                    onPressed: () => _newPlaylist(folder: folderId),
+                  ),
+                  IconButton(
+                    tooltip: 'New folder',
+                    icon: const Icon(Icons.create_new_folder_outlined),
+                    onPressed: () => _newFolder(folderId),
+                  ),
+                  if (folder != null)
+                    PopupMenuButton<String>(
+                      tooltip: 'Folder actions',
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (v) => _folderAction(folder.id, v),
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'rename',
+                          child: Text('Rename folder…'),
+                        ),
+                        PopupMenuItem(
+                          value: 'move',
+                          child: Text('Move folder to…'),
+                        ),
+                        PopupMenuDivider(),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete folder…'),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+            if (!compact)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: _searchField(hint: 'Search playlists'),
+              ),
+            const Divider(height: 1),
+            Expanded(
+              child:
+                  empty ??
+                  Scrollbar(
+                    controller: _scroll,
+                    child: ListView(controller: _scroll, children: rows),
+                  ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _playlistRow(String id, bool showWhere) {
+    final col = c.collections;
+    final count = id == mainListId
+        ? c.playlist.length
+        : (col.pathsOf(id)?.length ?? 0);
+    final user = col.byId(id) != null;
+    final where = showWhere ? col.folderLabel(col.byId(id)?.folder) : '';
+    final playing = c.playingList == id;
+    return _BrowserRow(
+      icon: playing ? Icons.graphic_eq : _listIcon(id),
+      iconColor: id == favouritesId
+          ? Palette.star
+          : (playing ? Palette.accent : null),
+      title: c.listName(id),
+      subtitle: [
+        count == 1 ? '1 tune' : '$count tunes',
+        if (where.isNotEmpty) where,
+      ].join(' · '),
+      onTap: () => _open(id),
+      trailing: [
+        IconButton(
+          tooltip: 'Play',
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.play_arrow_rounded),
+          onPressed: count == 0 ? null : () => _playlistAction(id, 'play'),
+        ),
+        if (user)
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            icon: const Icon(Icons.more_vert, size: 20),
+            onSelected: (v) => _playlistAction(id, v),
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'toPlaylist',
+                child: Text('Add all to Playlist'),
+              ),
+              PopupMenuItem(value: 'rename', child: Text('Rename…')),
+              PopupMenuItem(value: 'move', child: Text('Move to folder…')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'delete', child: Text('Delete playlist…')),
+            ],
+          )
+        else
+          const SizedBox(width: 40),
+      ],
+    );
+  }
+
+  Widget _folderRow(PlaylistFolder f, bool showWhere) {
+    final col = c.collections;
+    final n = col.playlistCountUnder(f.id);
+    final where = showWhere ? col.folderLabel(f.parent) : '';
+    return _BrowserRow(
+      icon: Icons.folder_outlined,
+      iconColor: Palette.warm,
+      title: f.name,
+      subtitle: [
+        n == 1 ? '1 playlist' : '$n playlists',
+        if (where.isNotEmpty) where,
+      ].join(' · '),
+      onTap: () => _open(folderView(f.id)),
+      trailing: [
+        const Icon(Icons.chevron_right, color: Palette.textMuted),
+        PopupMenuButton<String>(
+          tooltip: 'More',
+          icon: const Icon(Icons.more_vert, size: 20),
+          onSelected: (v) => _folderAction(f.id, v),
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'rename', child: Text('Rename…')),
+            PopupMenuItem(value: 'move', child: Text('Move to…')),
+            PopupMenuDivider(),
+            PopupMenuItem(value: 'delete', child: Text('Delete folder…')),
+          ],
+        ),
+      ],
+    );
+  }
+
   List<PopupMenuEntry<String>> _actionItems(
     String id,
     List<PlaylistEntry> entries,
@@ -256,7 +590,10 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
     }
     return [
       item('toPlaylist', 'Add all to Playlist', enabled: has),
-      if (id != favouritesId) item('rename', 'Rename…'),
+      if (id != favouritesId) ...[
+        item('rename', 'Rename…'),
+        item('move', 'Move to folder…'),
+      ],
       const PopupMenuDivider(),
       if (id == favouritesId)
         item('clear', 'Clear favourites…', enabled: has)
@@ -336,13 +673,13 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
     );
   }
 
-  Widget _searchField() {
+  Widget _searchField({String hint = 'Search title, author or file'}) {
     return TextField(
       controller: _search,
       onChanged: (v) => setState(() => _query = v),
       decoration: InputDecoration(
         isDense: true,
-        hintText: 'Search title, author or file',
+        hintText: hint,
         prefixIcon: const Icon(Icons.search, size: 20),
         suffixIcon: _query.isEmpty
             ? null
@@ -364,98 +701,127 @@ class _PlaylistPanelState extends State<PlaylistPanel> {
   }
 }
 
-/// Header button naming the list shown; opens the menu of lists.
-class _ListPicker extends StatelessWidget {
-  const _ListPicker({
+IconData _listIcon(String id) => switch (id) {
+  mainListId => Icons.queue_music,
+  favouritesId => Icons.star_rounded,
+  _ => Icons.playlist_play,
+};
+
+/// Header naming the list shown, with its folder and tune count.
+class _ListTitle extends StatelessWidget {
+  const _ListTitle({
     required this.controller,
-    required this.onPicked,
+    required this.id,
     required this.compact,
     required this.count,
   });
 
   final PlayerController controller;
-  final ValueChanged<String> onPicked;
+  final String id;
   final bool compact;
-
-  /// Tunes in the list shown.
   final int count;
-
-  static IconData iconFor(String id) => switch (id) {
-    mainListId => Icons.queue_music,
-    favouritesId => Icons.star_rounded,
-    _ => Icons.playlist_play,
-  };
 
   @override
   Widget build(BuildContext context) {
-    final c = controller;
-    final id = c.shownList;
-    PopupMenuItem<String> item(String value, String name, int count) =>
-        PopupMenuItem(
-          value: value,
-          child: ListTile(
-            dense: true,
-            selected: value == id,
-            leading: Icon(
-              iconFor(value),
-              color: value == favouritesId ? Palette.star : null,
-            ),
-            title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-            trailing: Text(
-              '$count',
-              style: const TextStyle(
-                color: Palette.textMuted,
-                fontFeatures: tabular,
-              ),
-            ),
-          ),
-        );
-    return PopupMenuButton<String>(
-      tooltip: 'Show another list',
-      constraints: const BoxConstraints(minWidth: 240, maxWidth: 360),
-      onSelected: onPicked,
-      itemBuilder: (_) => [
-        item(mainListId, 'Playlist', c.playlist.length),
-        item(favouritesId, 'Favourites', c.collections.favourites.length),
-        for (final pl in c.collections.playlists)
-          item(pl.id, pl.name, pl.paths.length),
-        const PopupMenuDivider(),
-        const PopupMenuItem(
-          value: 'new',
-          child: ListTile(
-            dense: true,
-            leading: Icon(Icons.add),
-            title: Text('New playlist…'),
-          ),
+    final t = Theme.of(context).textTheme;
+    final where = controller.collections.folderLabel(
+      controller.collections.byId(id)?.folder,
+    );
+    return Row(
+      children: [
+        Icon(
+          _listIcon(id),
+          size: 20,
+          color: id == favouritesId ? Palette.star : Palette.accent,
         ),
-      ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              iconFor(id),
-              size: 20,
-              color: id == favouritesId ? Palette.star : Palette.accent,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                c.listName(id),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                controller.listName(id),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: compact
-                    ? Theme.of(context).textTheme.titleSmall
-                    : Theme.of(context).textTheme.titleMedium,
+                style: compact ? t.titleSmall : t.titleMedium,
               ),
-            ),
-            if (count > 0) ...[
-              const SizedBox(width: 6),
-              _Badge(text: '$count'),
+              if (where.isNotEmpty && !compact)
+                Text(
+                  where,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Palette.textMuted,
+                    fontSize: 11,
+                  ),
+                ),
             ],
-            const Icon(Icons.arrow_drop_down, color: Palette.textMuted),
-          ],
+          ),
+        ),
+        if (count > 0) ...[const SizedBox(width: 6), _Badge(text: '$count')],
+      ],
+    );
+  }
+}
+
+/// A playlist or folder in the browser.
+class _BrowserRow extends StatelessWidget {
+  const _BrowserRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    required this.trailing,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final Color? iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final List<Widget> trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: 56,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 16, right: 4),
+          child: Row(
+            children: [
+              Icon(icon, color: iconColor ?? Palette.textMuted),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Palette.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...trailing,
+            ],
+          ),
         ),
       ),
     );

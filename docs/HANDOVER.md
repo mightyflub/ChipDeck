@@ -89,6 +89,20 @@ and the version is given whenever a build is shared.
   accessibility crash, see NOTES.md). Same code on Windows and Android.
   Also fixed: next/previous were disabled when playing from the library
   with an empty playlist.
+  **Playlist browser and folders (same PR, after Stephen tried
+  0.11.0-test.97):** he asked for the Playlists side to open on a list of
+  playlists instead of a drop-down, and for playlist folders. The panel now
+  always starts on "Playlists": Playlist and Favourites at the top, then
+  folders and playlists (by name), each with a play button and a menu
+  (rename, move to folder, add all to Playlist, delete). Tap to open; the
+  back arrow goes up a level. Folders nest; "+" and the new-folder button
+  make one in the folder being browsed; deleting a folder moves its
+  contents up a level (nothing lost). The search box finds playlists and
+  folders by name anywhere. The "add to" menus show Playlist, Favourites
+  (for "add all"), the 5 playlists used most recently (`recentLists`),
+  "Choose a playlist…" (a dialog with folders and search, plus "New
+  playlist here") and "New playlist…". Folders are stored as
+  `playlistFolders` JSON; a playlist's folder is its `folder` field.
 - **Library refresh hardening (0.10.1, branch claude/project-thread-dq5ked):**
   Stephen added three music locations (Protracker, Fasttracker2, RealSID)
   while a refresh was running; two of them never got scanned and the app
@@ -546,8 +560,11 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
    add from library rows and folders, reorder by dragging, play from a list
    (main Playlist unchanged; next/previous walk that list), restart (lists,
    shown list and position come back). Then the APK on the Ayn Thor.
+   Also the playlist browser: folders (nest, move, delete), "Choose a
+   playlist…" in the add menus, search by playlist name.
    Possible follow-ups: star on the second-screen controls, import/export
-   playlists as .m3u, a "starred" mark or filter in the library.
+   playlists as .m3u, a "starred" mark or filter in the library, drag
+   playlists onto folders.
 0000. Library refresh (0.10.1): Stephen refreshes the new music
    locations (Protracker, Fasttracker2, RealSID) and checks the scan
    report; then adds a location during a refresh (it should queue).
