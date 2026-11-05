@@ -590,7 +590,7 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
-The plan for the next releases (0.12.0 to 0.25.0: mute/solo, seeking,
+The plan for the next releases (0.12.0 to 0.21.0: mute/solo, seeking,
 C64 ROMs, play history, media keys, more formats, archive downloads,
 sound options, crossfade, export, AHX/HVL, SAP) is in
 [ROADMAP.md](ROADMAP.md). Pick up the first release there that is not
