@@ -259,6 +259,7 @@ docs/                     HANDOVER.md (this), NOTES.md (log)
 | Android file access | "All files access" + SAF pickers mapped to paths | Library/index code identical to Windows; fast on HVSC. Not Play Store friendly (see NOTES.md) |
 | Android background audio | Foreground service + MediaSessionCompat (androidx.media) | Survives screen off; lock screen and headset controls |
 | Android signing | Key from repo secrets in CI, debug key otherwise | Committing a key was refused as a credential leak |
+| Public repo | Workflow token is read-only; no secrets, ROMs or real tunes in git | Checked 2026-11-05 before going public; keep it that way (see NOTES.md) |
 
 ## How to build and run
 
