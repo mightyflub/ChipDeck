@@ -46,13 +46,27 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _onChange() {
+    final fromLib = c.message == null && lib.message != null;
     final msg = c.message ?? lib.message;
     if (msg != null) {
+      final report = fromLib && lib.messageHasIssues;
       c.message = null;
       lib.message = null;
+      lib.messageHasIssues = false;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(msg)));
+        ..showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            duration: Duration(seconds: report ? 10 : 4),
+            action: report
+                ? SnackBarAction(
+                    label: 'Details',
+                    onPressed: () => showScanReport(context, lib),
+                  )
+                : null,
+          ),
+        );
     }
   }
 

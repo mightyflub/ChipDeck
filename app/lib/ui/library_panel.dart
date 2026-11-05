@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -166,7 +167,8 @@ class _LibraryPanelState extends State<LibraryPanel> {
                   _header(context),
                   if (lib.roots.isNotEmpty) _searchBox(),
                 ],
-                if (lib.scan != null) _ScanBar(scan: lib.scan!),
+                if (lib.scan != null)
+                  _ScanBar(scan: lib.scan!, onCancel: lib.cancelScan),
                 const Divider(height: 1),
                 Expanded(
                   child: lib.roots.isEmpty
@@ -449,40 +451,142 @@ class _LibraryPanelState extends State<LibraryPanel> {
 }
 
 class _ScanBar extends StatelessWidget {
-  const _ScanBar({required this.scan});
+  const _ScanBar({required this.scan, required this.onCancel});
   final ScanProgress scan;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
     final frac = scan.total == 0 ? null : scan.done / scan.total;
+    const muted = TextStyle(
+      fontSize: 12,
+      color: Palette.textMuted,
+      fontFeatures: tabular,
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(16, 0, 4, 6),
+      child: Row(
         children: [
-          Text(
-            scan.total == 0
-                ? scan.phase
-                : '${scan.phase} ${scan.done} of ${scan.total}…',
-            style: const TextStyle(
-              fontSize: 12,
-              color: Palette.textMuted,
-              fontFeatures: tabular,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  scan.total == 0
+                      ? scan.phase
+                      : '${scan.phase} ${scan.done} of ${scan.total}…',
+                  style: muted,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (scan.slowFile != null)
+                  Text(
+                    'Still reading ${p.basename(scan.slowFile!)}…',
+                    style: muted,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: frac,
+                    minHeight: 4,
+                    backgroundColor: Palette.panelHigh,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: frac,
-              minHeight: 4,
-              backgroundColor: Palette.panelHigh,
-            ),
+          IconButton(
+            tooltip: 'Cancel refresh',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.close, size: 20),
+            onPressed: onCancel,
           ),
         ],
       ),
     );
   }
+}
+
+/// Lists what the latest refreshes skipped and why.
+Future<void> showScanReport(BuildContext context, LibraryController lib) {
+  return showDialog<void>(
+    context: context,
+    builder: (context) {
+      final issues = lib.scanIssues;
+      return AlertDialog(
+        title: Text(
+          issues.isEmpty
+              ? 'Scan report'
+              : 'Scan report: ${issues.length} skipped',
+        ),
+        content: SizedBox(
+          width: 560,
+          height: issues.isEmpty ? null : 420,
+          child: issues.isEmpty
+              ? const Text(
+                  'The last refresh read every file and folder.',
+                  style: TextStyle(color: Palette.textMuted),
+                )
+              : ListView.builder(
+                  itemCount: issues.length,
+                  itemBuilder: (context, i) {
+                    final it = issues[i];
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        it.kind == ScanIssueKind.folder
+                            ? Icons.folder_off_outlined
+                            : it.kind == ScanIssueKind.notATune
+                            ? Icons.help_outline
+                            : Icons.warning_amber_rounded,
+                        color: Palette.textMuted,
+                      ),
+                      title: Text(
+                        p.basename(it.path),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: SelectableText(
+                        '${it.kind.label}: ${it.detail}\n${it.path}',
+                        style: const TextStyle(
+                          color: Palette.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          if (issues.isNotEmpty)
+            TextButton.icon(
+              icon: const Icon(Icons.copy, size: 18),
+              label: const Text('Copy list'),
+              onPressed: () {
+                Clipboard.setData(
+                  ClipboardData(
+                    text: [
+                      for (final it in issues)
+                        '${it.kind.label}\t${it.path}\t${it.detail}',
+                    ].join('\n'),
+                  ),
+                );
+                ScaffoldMessenger.maybeOf(context)
+                    ?.showSnackBar(const SnackBar(content: Text('Copied.')));
+              },
+            ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      );
+    },
+  );
 }
 
 class _Breadcrumb extends StatelessWidget {
@@ -1021,7 +1125,8 @@ class _LocationsDialog extends StatelessWidget {
                     library.scanningRoots.contains(r)
                         ? 'Refreshing…'
                         : '${library.folder(r)?.totalTracks ?? 0} tunes'
-                              '${library.rootScans[r] == null ? '' : ' · refreshed ${_fmt(library.rootScans[r]!)}'}',
+                              '${library.rootScans[r] == null ? '' : ' · refreshed ${_fmt(library.rootScans[r]!)}'}'
+                              '${_issuesIn(library, r)}',
                     style: const TextStyle(color: Palette.textMuted),
                   ),
                   trailing: Row(
@@ -1055,6 +1160,11 @@ class _LocationsDialog extends StatelessWidget {
           ),
         ),
         actions: [
+          if (library.scanIssues.isNotEmpty)
+            TextButton(
+              onPressed: () => showScanReport(context, library),
+              child: Text('Scan report (${library.scanIssues.length})'),
+            ),
           TextButton(
             onPressed: library.isScanning || library.roots.isEmpty
                 ? null
@@ -1079,6 +1189,13 @@ class _LocationsDialog extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static String _issuesIn(LibraryController lib, String root) {
+    final n = lib.scanIssues
+        .where((i) => p.isWithin(root, i.path) || p.equals(root, i.path))
+        .length;
+    return n == 0 ? '' : ' · $n skipped';
   }
 
   static String _fmt(DateTime d) =>
