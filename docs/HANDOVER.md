@@ -53,7 +53,7 @@ and the version is given whenever a build is shared.
 ## Current state (2026-11-05)
 
 - **Library refresh hardening (0.10.1, branch claude/project-thread-dq5ked):**
-  Stephen added three locations on X: (Protracker, Fasttracker2, RealSID)
+  Stephen added three music locations (Protracker, Fasttracker2, RealSID)
   while a refresh was running; two of them never got scanned and the app
   showed nothing about it. Fixed: a location added (or a refresh asked
   for) during a refresh is queued and refreshed straight after it
@@ -478,7 +478,7 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
-0000. Library refresh (0.10.1): Stephen refreshes the X:\Roms-Mister\Music
+0000. Library refresh (0.10.1): Stephen refreshes the new music
    locations (Protracker, Fasttracker2, RealSID) and checks the scan
    report; then adds a location during a refresh (it should queue).
 000. Playlist/library refresh (0.10.0): Stephen tries the Windows build:

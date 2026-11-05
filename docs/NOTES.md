@@ -625,8 +625,8 @@ is probably an engine bookkeeping bug that this tree shape avoids.
 ### Library refresh getting stuck (2026-11-05, 0.10.1)
 
 Stephen: the 0.10.0 build "got stuck" scanning new locations and showed
-no error. He had added X:\Roms-Mister\Music\Protracker, \Fasttracker2
-and \RealSID; when the refresh finished, Protracker and RealSID showed
+no error. He had added three folders under <music folder> (Protracker,
+Fasttracker2 and RealSID); when the refresh finished, Protracker and RealSID showed
 no tunes. He then spotted the cause himself: locations added while a
 refresh is running are never scanned (`rescan()` returned at once when
 `isScanning`), while the progress total grew. Fixed by queueing them.
