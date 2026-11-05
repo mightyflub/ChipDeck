@@ -11,7 +11,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <thread>
 #include <vector>
@@ -44,7 +46,11 @@ void usage()
         "      --basic F         BASIC ROM (8 KB)\n"
         "      --chargen F       character ROM (4 KB)\n"
         "  -w, --wav OUT.wav     render to a WAV file instead of the speakers\n"
-        "  -i, --info            print tune info and exit\n\n"
+        "  -i, --info            print tune info and exit\n"
+        "      --scan DIR        read the tune info of every tune below DIR, as the\n"
+        "                        app's library scan does, printing each file before\n"
+        "                        it is read and how long it took (finds files that\n"
+        "                        hang or slow down the scan)\n\n"
         "Keys while playing: n/p next/previous subtune, space pause, q quit\n",
         cd_version());
 }
@@ -137,6 +143,56 @@ double limitFor(cd_player* p, double userSeconds)
     return 0; // forever
 }
 
+// ------------------------------------------------------------ --scan DIR
+bool scanCandidate(const std::filesystem::path& path)
+{
+    std::string name = path.filename().u8string();
+    for (auto& c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    static const char* const prefixes[] = { "mod.", "mdat.", "hip.", "hipc.", "hip7.", "fc." };
+    for (const char* pre : prefixes)
+        if (name.size() > std::strlen(pre) && name.compare(0, std::strlen(pre), pre) == 0) return true;
+    static const char* const exts[] = {
+        ".sid", ".psid", ".rsid", ".mus", ".prg", ".sndh", ".snd", ".ym", ".mod", ".xm",
+        ".mdat", ".tfx", ".tfm", ".tfmx", ".hip", ".hipc", ".hip7", ".sog", ".fc", ".fc13",
+        ".fc14", ".smod" };
+    const size_t dot = name.rfind('.');
+    if (dot == std::string::npos) return false;
+    const std::string ext = name.substr(dot);
+    for (const char* e : exts)
+        if (ext == e) return true;
+    return false;
+}
+
+int scanDir(const char* dir, const char* songlengths)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::recursive_directory_iterator it(fs::u8path(dir), fs::directory_options::skip_permission_denied, ec);
+    if (ec) { std::printf("cannot open %s: %s\n", dir, ec.message().c_str()); return 1; }
+    int n = 0, failed = 0, slow = 0;
+    for (; it != fs::recursive_directory_iterator(); it.increment(ec))
+    {
+        if (ec) { std::printf("LIST ERROR %s\n", ec.message().c_str()); ec.clear(); continue; }
+        std::error_code e2;
+        if (!it->is_regular_file(e2) || !scanCandidate(it->path())) continue;
+        const std::string path = it->path().u8string();
+        std::printf("probe %s ... ", path.c_str());
+        std::fflush(stdout);
+        cd_info info;
+        const auto t0 = std::chrono::steady_clock::now();
+        const int r = cd_probe_file(path.c_str(), songlengths, &info);
+        const long ms = static_cast<long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - t0).count());
+        std::printf("%s %ld ms%s\n", r == 0 ? info.format : "FAILED", ms, ms > 1000 ? "  SLOW" : "");
+        std::fflush(stdout);
+        ++n;
+        if (r != 0) ++failed;
+        if (ms > 1000) ++slow;
+    }
+    std::printf("\n%d files, %d not readable as tunes, %d slow (over 1 s)\n", n, failed, slow);
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -151,6 +207,7 @@ int main(int argc, char** argv)
     int subtune = 0;
     double seconds = 0;
     bool infoOnly = false;
+    const char* scan = nullptr;
     cd_sid_model model = CD_SID_AUTO;
 
     for (int a = 1; a < argc; ++a)
@@ -168,6 +225,7 @@ int main(int argc, char** argv)
         else if (s == "--basic") basic = next();
         else if (s == "--chargen") chargen = next();
         else if (s == "-i" || s == "--info") infoOnly = true;
+        else if (s == "--scan") scan = next();
         else if (s == "-m" || s == "--model")
         {
             std::string m = next();
@@ -177,6 +235,7 @@ int main(int argc, char** argv)
         else if (!s.empty() && s[0] == '-') { usage(); return 2; }
         else file = argv[a];
     }
+    if (scan) return scanDir(scan, songlengths);
     if (!file) { usage(); return 2; }
 
     cd_player* p = cd_create(kRate);
