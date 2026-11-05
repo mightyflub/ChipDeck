@@ -7,7 +7,7 @@ Status: **plan only, no code yet** (2026-11-04). Builds on the core design in
 
 Use **AtariAudio** (https://github.com/arnaud-carre/AtariAudio, MIT) as the
 single engine for both Atari ST formats, **.sndh** and **.ym**. It is the
-emulation library inside the sndh-player repo Stephen linked, split out into
+emulation library inside the sndh-player repo the owner linked, split out into
 its own repo by the same author. It is small (about 14 C++ files), has no
 dependencies, uses no file I/O and no floating point, builds with plain CMake,
 is thread safe per instance, and is already used as a library by other
@@ -207,7 +207,7 @@ from inside ZIP archives rather than file paths.
   not emulate. Mitigation: psgplay as an optional second SNDH backend later,
   picked per file if AtariAudio fails to init or renders silence.
 - **Mono only**: fine for YM; a few STE tunes are stereo. Revisit only if it
-  bothers Stephen.
+  bothers the owner.
 - **Not compile-tested yet**: this plan was written from reading the source.
   The first coding step (A2) should build AtariAudio with MSVC and the NDK
   before anything else.

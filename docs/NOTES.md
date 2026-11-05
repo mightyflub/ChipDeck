@@ -4,7 +4,7 @@ Chronological log of research and decisions. Newest entries at the bottom.
 
 ## 2026-11-04: Evaluation of sakirhossn/SidPlayer
 
-Stephen asked whether https://github.com/sakirhossn/SidPlayer would help.
+The owner asked whether https://github.com/sakirhossn/SidPlayer would help.
 
 Findings (cloned at commit 8c3e9f9, 2026-10-18):
 
@@ -63,7 +63,7 @@ adopt GPL-2.0-or-later (or GPL-3.0) itself.
 
 ## 2026-11-04: Stack approved, milestone 1 (CLI player) built
 
-Stephen picked "build CLI, Flutter UI later".
+The owner picked "build CLI, Flutter UI later".
 
 What was done:
 - Vendored libsidplayfp 3.1.2 and libresidfp 1.2.3 from their **release
@@ -90,11 +90,11 @@ What was done:
 
 ## 2026-11-04: Confirmed on Windows
 
-Stephen ran the MinGW-built chipdeck-cli.exe on his PC: "runs well".
+The owner ran the MinGW-built chipdeck-cli.exe on their PC: "runs well".
 
 ## 2026-11-04: Flutter app (milestone 2)
 
-Stephen asked to start the Flutter app: "attractive but functional".
+The owner asked to start the Flutter app: "attractive but functional".
 
 - Core grew a shared library (`chipdeck-shared` target, file chipdeck.dll /
   libchipdeck.so) with `cd_audio_*` (miniaudio output, volume, scope ring
@@ -118,7 +118,7 @@ Stephen asked to start the Flutter app: "attractive but functional".
 
 ## 2026-11-04: SNDH and YM engine evaluation
 
-Stephen linked https://github.com/arnaud-carre/sndh-player and asked for a
+The owner linked https://github.com/arnaud-carre/sndh-player and asked for a
 plan (no code yet) for .sndh and .ym support. Full plan:
 [SNDH_YM_PLAN.md](SNDH_YM_PLAN.md).
 
@@ -147,7 +147,7 @@ plan (no code yet) for .sndh and .ym support. Full plan:
 
 ## 2026-11-04: SNDH and YM playback in core and CLI
 
-Stephen asked for "a command line player test like we did for the sid files".
+The owner asked for "a command line player test like we did for the sid files".
 
 - Vendored AtariAudio 1.27 (`third_party/atariaudio`, tag 1.27 = commit
   f68f058) and added a CMake target `atariaudio`. Builds with no warnings
@@ -180,7 +180,7 @@ when `sid_chips == 0` (scope only). SNDH files carry their own length.
 
 ## 2026-11-04: Music library and search index
 
-Stephen: "store locations of my music archive and let me browse and search
+The owner: "store locations of my music archive and let me browse and search
 them ... we need that and a search index".
 
 - Index format: one JSON file (`library.json`, app support dir) with roots,
@@ -200,7 +200,7 @@ them ... we need that and a search index".
 
 ## 2026-11-04: Android app
 
-Stephen: "build an android version of this app. Going forward we'll keep
+The owner: "build an android version of this app. Going forward we'll keep
 the two versions in sync". So one Flutter codebase and one native core for
 both; platform code is kept small and behind `app/lib/platform/`.
 
@@ -248,9 +248,9 @@ both; platform code is kept small and behind `app/lib/platform/`.
 
 ## 2026-11-04: Landscape layout (Ayn Thor)
 
-Stephen tried the APK on his Ayn Thor: it works (library, SID playback in
+The owner tried the APK on their Ayn Thor: it works (library, SID playback in
 the background), but search showed hardly any results on the landscape top
-screen, and he asked for the whole UI to suit landscape. At ~731x411 dp
+screen, and they asked for the whole UI to suit landscape. At ~731x411 dp
 the old phone layout spent ~330 dp on chrome (title bar, library header,
 search box, filter chips, results header, bottom bar), leaving room for
 about one result. Now (same code on all platforms, by window size):
@@ -262,7 +262,7 @@ the new CHIPDECK_WINDOW size override in the Linux runner).
 
 ## 2026-11-04: Second-screen controls
 
-Stephen asked for dual-screen support on the Ayn Thor: player controls on
+The owner asked for dual-screen support on the Ayn Thor: player controls on
 the bottom screen, everything else on top. Android exposes the second
 display through DisplayManager, so ChipDeck shows an Android Presentation
 there whenever a display other than its own is on. The controls are
@@ -300,18 +300,18 @@ becomes the top app again (onTopResumedActivityChanged, Android 10+).
 
 ## 2026-11-04: Version numbers
 
-Stephen asked for version numbers on every build, test builds included.
+The owner asked for version numbers on every build, test builds included.
 Base version in pubspec (now 0.4.0: CLI, Windows app, library, Android
 were the first four milestones); CI adds `-test.<run>` unless the build is
 from a matching `v` tag. Shown in Settings and in artifact and APK names.
-He then said a Windows test build isn't needed every time: the Windows
+They then said a Windows test build isn't needed every time: the Windows
 app now builds only on main, tags and on request, and branch pushes no
 longer make a second run next to the pull request's.
 
 
 ## 2026-11-04: Every channel in the visualiser (0.5.0)
 
-Stephen asked for the visualiser to show all channels of a tune,
+The owner asked for the visualiser to show all channels of a tune,
 including digi drums on SID files. The Now playing visualiser now shows
 one oscilloscope per channel by default ("Channels"); the corner button
 switches back to the old mixed scope with SID voice tiles ("Mix"), and
@@ -354,14 +354,14 @@ docs/screenshots/landscape-channels-sid.png (made-up 3-voice tune with a
 slow volume flip on Digi) and landscape-channels-sndh.png.
 
 Not tested on real digi tunes in the cloud (HVSC is blocked here); worth
-checking with e.g. a Mahoney or Galway digi tune on Stephen's devices.
+checking with e.g. a Mahoney or Galway digi tune on the owner's devices.
 
-Stephen tried 0.5.0-test.61 on the Ayn Thor: "that works."
+The owner tried 0.5.0-test.61 on the Ayn Thor: "that works."
 
 
 ## 2026-11-04: STIL tune info (0.6.0)
 
-Stephen asked for the full STIL info about the track and musician for SID
+The owner asked for the full STIL info about the track and musician for SID
 tunes.
 
 Format (HVSC DOCUMENTS/STIL.txt, and BUGlist.txt which uses the same
@@ -400,7 +400,7 @@ golden test on Linux using the same sample (not committed).
 
 ## 2026-11-04: Amiga MOD and Fasttracker 2 XM (0.7.0)
 
-Stephen asked for the Amiga .mod format, then also Fasttracker 2 .xm.
+The owner asked for the Amiga .mod format, then also Fasttracker 2 .xm.
 
 Engine choice: **libxmp 4.6.3** (MIT, plain C, vendored in
 third_party/libxmp from the libxmp-4.6.3 git tag). Compared with libopenmpt
@@ -456,18 +456,18 @@ AddressSanitizer. Linux app checked under Xvfb (6-channel XM and the
 channels-xm.png and landscape-channels-mod.png.
 
 Not tested in the cloud: real MOD/XM collections (Modland/AMP are not
-reachable here). Worth trying on Stephen's devices: a classic Protracker
+reachable here). Worth trying on the owner's devices: a classic Protracker
 MOD, an 8-channel MOD, a big XM (20+ channels), and a PowerPacked mod.
 
 Library filter chip shortened to "MOD / XM" (the long label overran the
-wide layout); the chip row now scrolls sideways when narrow. Stephen
+wide layout); the chip row now scrolls sideways when narrow. The owner
 confirmed MOD playback on Windows (0.7.0-test.68); XM untested on real
-files for now, merged on his say-so. Later the same day Stephen confirmed
+files for now, merged on their say-so. Later the same day the owner confirmed
 XM works too, including 8+ channel XMs and the visualiser.
 
 ## 2026-11-04: TFMX and TFMX-ST (0.8.0)
 
-Stephen asked for TFMX and TFMX-ST.
+The owner asked for TFMX and TFMX-ST.
 
 What they are:
 
@@ -535,7 +535,7 @@ Not tested: real TFMX or TFMX-ST files (Modland is blocked in the cloud).
 
 ## 2026-11-04: Playing from the library, refresh per location (0.10.0)
 
-Stephen: "Don't add every file the user plays to the playlist. Don't
+The owner: "Don't add every file the user plays to the playlist. Don't
 automatically refresh the library on startup. Add options to refresh each
 library individually or all at once."
 
@@ -562,7 +562,7 @@ library individually or all at once."
   device yet.
 ## 2026-11-04: Format filter and desktop layout (0.9.0)
 
-Stephen: "we need a better way of choosing the platform filters. As we add
+The owner: "we need a better way of choosing the platform filters. As we add
 more they won't all fit on screen at once. Secondly the windows app looks
 bare and the space isn't well used."
 
@@ -602,7 +602,7 @@ unreadable root, so the startup rescan keeps them) at 1920x1080,
 
 ### Windows crash in 0.9.0-test.79 (fixed in the next build)
 
-Stephen: 0.9.0-test.79 crashed on Windows a few seconds after launch,
+The owner: 0.9.0-test.79 crashed on Windows a few seconds after launch,
 during the startup library scan; 0.8 did not. Windows event log: access
 violation in flutter_windows.dll at offset 0x3c1ca. Symbolised against
 the engine's PDB (Flutter 3.47.9, engine 89c39edf, PDB ships in
@@ -613,7 +613,7 @@ null. The engine builds the accessibility tree only when something on the
 PC uses UI Automation, which is why it never showed in Linux tests.
 
 Diagnostic builds with environment switches (test.80 and test.82, run on
-Stephen's PC 8 times each, round-robin, 40 s): unchanged build crashed
+the owner's PC 8 times each, round-robin, 40 s): unchanged build crashed
 8/8; with the new full-height Now playing panel turned off, or wrapped in
 its own `Semantics(container: true, explicitChildNodes: true)`, or inside
 a scroll view (as the old layout was): 0/8 each. The three-column layout
@@ -624,7 +624,7 @@ is probably an engine bookkeeping bug that this tree shape avoids.
 
 ## 2026-11-05: Favourites and user playlists (0.11.0)
 
-Stephen: "support for a favorites system and also the ability to create
+The owner: "support for a favorites system and also the ability to create
 your own playlists. I'll be testing initially on the windows build".
 
 Decisions:
@@ -636,7 +636,7 @@ Decisions:
   playing use the same code as named playlists (`Collections`).
 - Playing from Favourites or a named playlist uses the library's queue
   path (`playList` → `_queue` with `_queueSource`), so the main Playlist is
-  never changed by playing (Stephen's 0.10 rule) and its `currentIndex`
+  never changed by playing (the owner's 0.10 rule) and its `currentIndex`
   logic is untouched. Edits to the list being played re-sync the queue
   (`_syncQueue`); if the playing tune is removed, the old order is kept
   until the next play.
@@ -664,7 +664,7 @@ Not checked here: Windows (CI build only) and Android (CI APK).
 
 ### Playlist browser and folders (2026-11-05, same PR)
 
-Stephen tried 0.11.0-test.97 ("I like it") and asked for the playlists
+The owner tried 0.11.0-test.97 ("I like it") and asked for the playlists
 side to show the list of playlists by default instead of the header
 drop-down ("will get unwieldy quickly"), and for playlist folders.
 
@@ -683,10 +683,10 @@ drop-down ("will get unwieldy quickly"), and for playlist folders.
   1600x900 and 960x540 (browser, nested folder, chooser dialog).
 ### Library refresh getting stuck (2026-11-05, 0.10.1)
 
-Stephen: the 0.10.0 build "got stuck" scanning new locations and showed
-no error. He had added three folders under <music folder> (Protracker,
+The owner: the 0.10.0 build "got stuck" scanning new locations and showed
+no error. They had added three folders under <music folder> (Protracker,
 Fasttracker2 and RealSID); when the refresh finished, Protracker and RealSID showed
-no tunes. He then spotted the cause himself: locations added while a
+no tunes. They then spotted the cause themselves: locations added while a
 refresh is running are never scanned (`rescan()` returned at once when
 `isScanning`), while the progress total grew. Fixed by queueing them.
 
@@ -707,7 +707,7 @@ same change:
 
 ## 2026-11-05: Checked before making the repo public
 
-Stephen asked whether the repo is safe to make public (public repos get
+The owner asked whether the repo is safe to make public (public repos get
 free GitHub Actions minutes). Checked all branches and the full history:
 no keystore, password, token or key was ever committed; signing comes
 only from repository secrets, and pull requests from forks never get
@@ -719,7 +719,7 @@ notes; write `<music folder>` instead.
 
 ## 2026-11-05: GitHub releases and README build instructions
 
-Stephen asked for a release build on GitHub, and for build instructions
+The owner asked for a release build on GitHub, and for build instructions
 for every platform on the front page, saying which are tested.
 
 - Release path in `.github/workflows/build.yml`: a "release" input on
@@ -731,7 +731,7 @@ for every platform on the front page, saying which are tested.
   release APK must be signed with the release key (the job fails rather
   than ship a debug-signed APK, which would not install over earlier
   builds). Chosen over pushing tags from Claude's container so a release is
-  one button for Stephen too.
+  one button for the owner too.
 - The release tag is made by the workflow token, so it does not start a
   second "build" run (GitHub never triggers workflows from that token).
 - README: download links, a table of platforms with tested/untested

@@ -255,7 +255,7 @@ class PlayerController extends ChangeNotifier {
       ),
     );
     // The Playlists panel always starts on the list of playlists
-    // (Stephen, 2026-11-05).
+    // (the owner, 2026-11-05).
     shownList = homeId;
     final saved = _prefs.getStringList('playlist') ?? const [];
     addFiles(saved.where((f) => File(f).existsSync()).toList(), persist: false);

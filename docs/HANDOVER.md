@@ -13,7 +13,7 @@ Composer (since 0.8.0). Possibly more formats later.
 
 ## Keeping Windows and Android in sync
 
-Stephen's rule (2026-11-04): every feature or fix lands on both Windows and
+The owner's rule (2026-11-04): every feature or fix lands on both Windows and
 Android, or is listed under "Pending on one platform" below. Both apps are
 the same Flutter code (`app/lib`) and the same native core; platform code
 lives only in `app/lib/platform/` (Dart) and `app/android/.../kotlin`
@@ -35,7 +35,7 @@ only inside `lib/platform/`.
 
 ## Version numbers and CI builds
 
-Stephen's rule (2026-11-04): every build has a version, test builds too,
+The owner's rule (2026-11-04): every build has a version, test builds too,
 shown in the app (Settings title, Licenses page) and in the artifact name,
 and the version is given whenever a build is shared.
 
@@ -48,19 +48,19 @@ and the version is given whenever a build is shared.
 - Builds made by hand without `--dart-define=CHIPDECK_VERSION=...` show
   "dev".
 - 2026-11-05: Actions stopped starting jobs (every job failed in ~5 s with
-  no log, most likely the private repo's minutes). Stephen made the repo
+  no log, most likely the private repo's minutes). The owner made the repo
   public, which gives free Actions minutes. If Actions is ever blocked
-  again, build on Stephen's PC instead: see "Local builds on Stephen's PC"
+  again, build on the owner's PC instead: see "Local builds on the owner's PC"
   under How to build and run.
 - CI runs on pull requests (test APKs come from these runs), on main and
   on v* tags (and manual runs; a manual run with "release" ticked or a
-  v* tag publishes a GitHub release, see "Making a release"). The Windows app (Stephen, 2026-11-04: not needed for every
+  v* tag publishes a GitHub release, see "Making a release"). The Windows app (the owner, 2026-11-04: not needed for every
   test build) builds only on main, tags, or a manual "Run workflow" with
   "windows" ticked. Pushes to other branches without a PR build nothing.
 
 ## Making a release
 
-Stephen asked (2026-11-05) for GitHub releases; 0.11.0 was the first.
+The owner asked (2026-11-05) for GitHub releases; 0.11.0 was the first.
 Releases are on https://github.com/mightyflub/ChipDeck/releases with the
 files `ChipDeck-<version>-windows-x64.zip`, `ChipDeck-<version>-android.apk`
 (signed with the release key) and `ChipDeck-<version>-SHA256SUMS.txt`.
@@ -84,7 +84,7 @@ keep it up to date when a platform is tried.
 ## Current state (2026-11-05)
 
 - **Favourites and your own playlists (0.11.0, branch claude/project-thread-v2ksvd):**
-  Stephen asked (2026-11-05) for favourites and user-made playlists, testing
+  The owner asked (2026-11-05) for favourites and user-made playlists, testing
   on Windows first. The Playlist panel is now "Playlists": a picker in its
   header switches between the main **Playlist** (unchanged behaviour),
   **Favourites**, and any number of named playlists, plus "New playlist…".
@@ -113,8 +113,8 @@ keep it up to date when a platform is tried.
   accessibility crash, see NOTES.md). Same code on Windows and Android.
   Also fixed: next/previous were disabled when playing from the library
   with an empty playlist.
-  **Playlist browser and folders (same PR, after Stephen tried
-  0.11.0-test.97):** he asked for the Playlists side to open on a list of
+  **Playlist browser and folders (same PR, after the owner tried
+  0.11.0-test.97):** they asked for the Playlists side to open on a list of
   playlists instead of a drop-down, and for playlist folders. The panel now
   always starts on "Playlists": Playlist and Favourites at the top, then
   folders and playlists (by name), each with a play button and a menu
@@ -127,10 +127,10 @@ keep it up to date when a platform is tried.
   "Choose a playlist…" (a dialog with folders and search, plus "New
   playlist here") and "New playlist…". Folders are stored as
   `playlistFolders` JSON; a playlist's folder is its `folder` field.
-  Stephen then asked for the main playlist to be called **"Playing Now"**
+  The owner then asked for the main playlist to be called **"Playing Now"**
   in the app (only the label; the code still calls it the main playlist,
   `mainListId`, stored as `playlist`).
-  **Random order (same PR):** Stephen asked for random playback in the
+  **Random order (same PR):** the owner asked for random playback in the
   player controls. The shuffle button moved from the playlist header to the
   transport (next to "when a song ends", every layout; S key; also on the
   Android second-screen controls via a `shuffle` action/state field). It
@@ -139,7 +139,7 @@ keep it up to date when a platform is tried.
   already played (`app/lib/player/shuffle.dart`, tested). Picking a tune by
   hand or changing the list starts a fresh order.
 - **Library refresh hardening (0.10.1, branch claude/project-thread-dq5ked):**
-  Stephen added three music locations (Protracker, Fasttracker2, RealSID)
+  The owner added three music locations (Protracker, Fasttracker2, RealSID)
   while a refresh was running; two of them never got scanned and the app
   showed nothing about it. Fixed: a location added (or a refresh asked
   for) during a refresh is queued and refreshed straight after it
@@ -173,7 +173,7 @@ keep it up to date when a platform is tried.
   Same code on Windows and Android (all Dart). Version 0.10.0 because a
   parallel thread (Windows layout and format filters) takes 0.9.0.
 - **Format filter and desktop layout (0.9.0, branch claude/project-thread-zton23):**
-  Stephen asked for a filter that scales as formats are added, and for a
+  The owner asked for a filter that scales as formats are added, and for a
   Windows layout that uses the space. The library's row of filter chips
   is now one "Formats" button (`app/lib/ui/format_filter.dart`) that opens
   a panel grouped by system (Commodore 64, Atari ST, Amiga, PC), each with
@@ -197,7 +197,7 @@ keep it up to date when a platform is tried.
   The desktop Now playing is wrapped in its own `Semantics` container:
   without it, Flutter's Windows accessibility bridge crashed during a
   library scan (0.9.0-test.79; see NOTES.md). Keep it if you rework that
-  layout. Stephen confirmed 0.9.0-test.84 works on Windows (2026-11-05):
+  layout. The owner confirmed 0.9.0-test.84 works on Windows (2026-11-05):
   layout, filter, playback, full rescan. Not yet tried on the Ayn Thor.
 - **TFMX and TFMX-ST (0.8.0, branch claude/project-thread-ir84g9):**
   Amiga TFMX (v1.5, Pro, 7V; also Hippel TFMX and Future Composer, which
@@ -224,7 +224,7 @@ keep it up to date when a platform is tried.
   third_party/README.md). New `cd_info.system` (C64/Atari ST/Amiga/PC).
   App: .mod/.xm (and "mod.*" names) in pickers and library, MOD filter,
   badges. Details: NOTES.md (2026-11-04, Amiga MOD and Fasttracker 2 XM).
-  Stephen confirmed MOD playback works on Windows (0.7.0-test.68,
+  The owner confirmed MOD playback works on Windows (0.7.0-test.68,
   2026-11-04), and XM too, including 8+ channel XMs and the per-channel
   visualiser (2026-11-04). Merged to main.
 - **STIL tune info (0.6.0, branch claude/project-thread-lcoe5w):** for SID
@@ -249,20 +249,20 @@ keep it up to date when a platform is tried.
   The corner button switches to the old mixed scope ("Mix"). Same code on
   Windows and Android. Needs vendored-library patches, listed in
   third_party/README.md. Details in NOTES.md (2026-11-04, Every channel).
-  Stephen confirmed it works on the Ayn Thor (0.5.0-test.61, 2026-11-04).
+  The owner confirmed it works on the Ayn Thor (0.5.0-test.61, 2026-11-04).
 
 - **Android app (branch claude/project-thread-ryqtet, PR #3):** same Flutter
   app and core as Windows, built as an APK in CI (`app-android` job,
   artifact `chipdeck-app-android-<version>` containing `ChipDeck-<version>.apk`). Not yet tried
   on a phone. See "The Android app" below.
 
-- **Milestone 1 done, confirmed working on Stephen's Windows PC:** a
+- **Milestone 1 done, confirmed working on the owner's Windows PC:** a
   command-line player `chipdeck-cli` that plays .sid files through the
   speakers or renders them to WAV.
 - **Milestone 2 in progress: Flutter GUI (`app/`).** Builds and runs on
   Linux (screenshots in `docs/screenshots/`). Windows build runs in CI
   (`app-windows` job, artifact `chipdeck-app-windows-x64-<version>`); waiting for
-  Stephen to try it. Stephen asked for an "attractive but functional"
+  the owner to try it. The owner asked for an "attractive but functional"
   interface.
 - `chipdeck-core` has a plain C API (`core/include/chipdeck/chipdeck.h`)
   wrapping libsidplayfp 3.1.2 + reSIDfp 1.2.3. It is also built as a
@@ -274,13 +274,13 @@ keep it up to date when a platform is tried.
   C API (`cd_load_*`, `cd_get_info`, `cd_render`, subtunes, `cd_probe_file`).
   The shared library and so the Flutter app pick it up automatically, and
   the app accepts .sndh/.snd/.ym. The CLI build was confirmed working on
-  Stephen's Windows PC (2026-11-04). Plan and engine
+  the owner's Windows PC (2026-11-04). Plan and engine
   comparison: [SNDH_YM_PLAN.md](SNDH_YM_PLAN.md).
 - The SNDH/YM thread owns `core/src/chipdeck.cpp` and `atari_backend.*`;
   coordinate before editing those files.
 - Unit tests pass on Linux (also under AddressSanitizer). HVSC download
   hosts are blocked from the cloud dev container, so real-tune testing
-  happens on Stephen's PC.
+  happens on the owner's PC.
 
 ## Repository layout
 
@@ -356,7 +356,7 @@ docs/                     HANDOVER.md (this), NOTES.md (log)
 | Audio output | miniaudio 0.11.26 | One file, WASAPI on Windows, AAudio on Android |
 | Build system | CMake >= 3.16 | Works with Visual Studio and the Android NDK |
 | License | GPL-2.0-or-later (LICENSE) | Required by libsidplayfp |
-| UI | CLI for testing, Flutter app for users | Approved by Stephen 2026-11-04 |
+| UI | CLI for testing, Flutter app for users | Approved by the owner 2026-11-04 |
 | App audio | Native: miniaudio inside chipdeck.dll | No Flutter audio plugin needed; same code on Android |
 | App <-> core | dart:ffi to a C API, metadata probing in a background isolate | Simple, no platform channels |
 | App look | Dark theme, violet accent (#8E7CFF), cyan phosphor scope | Retro feel, readable |
@@ -404,7 +404,7 @@ On Linux: `sudo apt install ninja-build libgtk-3-dev clang`, then
 `flutter build linux --release`. The runner CMakeLists files include the
 repo root CMakeLists, so the native library is built automatically.
 
-Library (added 2026-11-04 at Stephen's request): saved music locations
+Library (added 2026-11-04 at the owner's request): saved music locations
 (e.g. HVSC C64Music, the SNDH archive), indexed in the background into
 `library.json` in the app support folder (Windows: %APPDATA%\io.github.mightyflub\chipdeck).
 Refreshes are incremental (size + mtime) and never automatic at startup
@@ -461,13 +461,13 @@ shuffle, settings (SID model, Songlengths.md5, STIL.txt, default length),
 STIL/BUGlist tune info for SID tunes (`lib/ui/tune_info.dart`).
 Keys: Space play/pause, Left/Right subtune, N/P tune, +/- volume.
 
-### Local builds on Stephen's PC (fallback when CI is unavailable)
+### Local builds on the owner's PC (fallback when CI is unavailable)
 
 Checked 2026-11-05 through a Remote Control session. Already installed:
 git, Visual Studio Community 2026 with the C++ desktop workload, CMake,
 Ninja, Windows SDK 10.0.26100. Missing: Flutter, Java 17, Android SDK/NDK
 (only Java 25 is installed, and the Android build targets 17). Developer
-Mode is off; Flutter needs it for plugin symlinks, and only Stephen can
+Mode is off; Flutter needs it for plugin symlinks, and only the owner can
 switch it on (Settings > System > For developers).
 To set up (portable installs in a dev folder, no admin rights, PATH set
 only for the build shell):
@@ -476,13 +476,13 @@ only for the build shell):
 - Android command-line tools or Android Studio (Android only):
   https://developer.android.com/studio, then `sdkmanager` for the
   platform, build-tools and NDK versions in `app/android` (accept the
-  licences only with Stephen's OK).
+  licences only with the owner's OK).
 Not yet checked: whether Flutter 3.47.9 builds with VS 2026. If it
 doesn't, install the VS 2022 Build Tools.
 Build with the CI version scheme, by hand:
 `flutter build windows --release --dart-define=CHIPDECK_VERSION=<base>-test.local<N>`.
 For an APK that installs over CI builds, sign it with the release key.
-Stephen creates `app/android/key.properties` himself so passwords never
+The owner creates `app/android/key.properties` themselves so passwords never
 pass through Claude. Use a build number above the last CI run
 (`--build-number`), or Android refuses the update as a downgrade.
 
@@ -497,7 +497,7 @@ Library locations are picked with the system folder picker; internal
 storage and SD cards work, cloud folders do not (single files from Drive
 etc. are copied into the app).
 
-Signing: the secrets below were set up on 2026-11-04 (Stephen keeps
+Signing: the secrets below were set up on 2026-11-04 (the owner keeps
 chipdeck.jks, alias chipdeck), so CI APKs from then on install as updates.
 The quick `android-signing-check` CI job shows whether the secrets arrive
 and unlock the key. Without secrets, CI signs with a throwaway debug key, so a newer
@@ -576,7 +576,7 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
   them (`--kernal/--basic/--chargen`). Commodore ROMs are copyrighted, so
   we should ship open replacement ROMs or let users point to their own.
 - Only .sid (PSID/RSID) tested. libsidplayfp also loads .prg/.p00/.mus.
-- SNDH/YM: confirmed working on Stephen's Windows PC (2026-11-04). No
+- SNDH/YM: confirmed working on the owner's Windows PC (2026-11-04). No
   seeking yet. Mono output (as on the ST's YM chip; STE DAC stereo is folded
   to mono by AtariAudio). AtariAudio's SNDH header parser trusts the header
   size, so a truncated file could read past its buffer; fine for real
@@ -590,7 +590,7 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
 
 ## Next steps
 
-0000. Favourites and playlists (0.11.0): Stephen tries the Windows build:
+0000. Favourites and playlists (0.11.0): the owner tries the Windows build:
    star tunes (library, Now playing, F key), make/rename/delete playlists,
    add from library rows and folders, reorder by dragging, play from a list
    (main Playlist unchanged; next/previous walk that list), restart (lists,
@@ -600,13 +600,13 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
    Possible follow-ups: star on the second-screen controls, import/export
    playlists as .m3u, a "starred" mark or filter in the library, drag
    playlists onto folders.
-0000. Library refresh (0.10.1): Stephen refreshes the new music
+0000. Library refresh (0.10.1): the owner refreshes the new music
    locations (Protracker, Fasttracker2, RealSID) and checks the scan
    report; then adds a location during a refresh (it should queue).
-000. Playlist/library refresh (0.10.0): Stephen tries the Windows build:
+000. Playlist/library refresh (0.10.0): the owner tries the Windows build:
    play from the library (playlist must stay unchanged, next/previous walk
    the folder or results), restart (no scan), refresh one location and all.
-00. TFMX / TFMX-ST (0.8.0): Stephen tries real files on Windows: Amiga
+00. TFMX / TFMX-ST (0.8.0): the owner tries real files on Windows: Amiga
    TFMX (e.g. Turrican 2, a 7V tune), and TFMX-ST pairs from Modland's
    "TFMX ST" folder (mdat.* + smpl.*). Listen especially for TFMX-ST digi
    drums (rate and length are guesses) and envelope (buzz) sounds. Then the
@@ -615,22 +615,22 @@ Real SNDH/YM tunes: https://sndh.atari.org/download.php (zip of the archive).
    PowerPacked mod, the Ayn Thor.
    Then: maybe .s3m/.it/.med, seeking, showing instrument names per channel.
 
-1. Stephen confirmed the Windows app and the library/search work (2026-11-04:
+1. The owner confirmed the Windows app and the library/search work (2026-11-04:
    "works well enough for now. I like it"). Next: merge PR #2, then Android.
    Still worth testing real HVSC tunes: an RSID digi tune and a 2SID tune.
-2. Android (PR #3): Stephen installs ChipDeck.apk and checks playback
+2. Android (PR #3): the owner installs ChipDeck.apk and checks playback
    (SID and SNDH/YM), the library on phone storage/SD card, background
    playback with the screen off, and notification controls. Then: audio
    focus (pause for calls/other apps), a real app icon (both platforms),
    signing secrets for in-place updates, battery check (maybe a lighter
    resampler on phones).
-3. SNDH/YM: Stephen tries chipdeck-cli with real tunes from the SNDH
+3. SNDH/YM: The owner tries chipdeck-cli with real tunes from the SNDH
    archive (include an STE DAC tune and a digidrum YM). Then add .sndh/.ym
    (and .snd) to the app's file filters; `cd_probe_file` already handles
    them. Later: seeking (`FastForward`), per-voice mute/VU via
    `AudioRenderWithVisualInfos`, browsing the SNDH archive zip
    (SNDH_YM_PLAN.md milestones A3 to A5).
-4. STIL info (0.6.0): Stephen checks it with real HVSC on the Ayn Thor and
+4. STIL info (0.6.0): The owner checks it with real HVSC on the Ayn Thor and
    Windows (a cover tune with several subtunes, e.g. in /MUSICIANS/H/
    Hubbard_Rob, and a tune listed in BUGlist.txt). Possible follow-ups:
    show STIL in the library (search comments), a "composer" page.

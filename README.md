@@ -20,8 +20,8 @@ the [build workflow](https://github.com/mightyflub/ChipDeck/actions/workflows/bu
 
 | Platform | What | Status |
 | --- | --- | --- |
-| Windows 10/11 x64 | App | **Tested** (Stephen's PC, every release) |
-| Windows 10/11 x64 | `chipdeck-cli` | **Tested** (Stephen's PC) |
+| Windows 10/11 x64 | App | **Tested** (the owner's PC, every release) |
+| Windows 10/11 x64 | `chipdeck-cli` | **Tested** (the owner's PC) |
 | Android (arm64) | App (APK) | **Tested** on an Ayn Thor (landscape, dual screen) |
 | Linux x64 | App | Built and unit-tested in CI and used for development screenshots; not tested as a player by a user |
 | Linux x64 | `chipdeck-cli` | Built, tested (`ctest`) and rendering test tunes to WAV in CI; not tested by a user |
