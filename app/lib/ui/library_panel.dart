@@ -3,10 +3,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../library/library.dart';
 import '../platform/files.dart' as files;
 import '../player/player_controller.dart';
+import 'format_filter.dart';
 import 'theme.dart';
 
 class LibraryPanel extends StatefulWidget {
@@ -30,6 +32,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
   final _scroll = ScrollController();
   String _query = '';
   FormatFilter _filter = FormatFilter.all;
+  static const _filterPref = 'libraryFormats';
   String? _dir; // current folder in browse mode; null = locations
   Timer? _debounce;
   List<LibraryTrack> _results = const [];
@@ -37,6 +40,26 @@ class _LibraryPanelState extends State<LibraryPanel> {
 
   LibraryController get lib => widget.library;
   PlayerController get player => widget.player;
+
+  @override
+  void initState() {
+    super.initState();
+    // The format filter is remembered between runs.
+    SharedPreferences.getInstance().then((prefs) {
+      final saved = FormatFilter.fromJson(prefs.getStringList(_filterPref));
+      if (mounted && saved != _filter) setState(() => _filter = saved);
+    });
+  }
+
+  void _setFilter(FormatFilter f) {
+    _filter = f;
+    _runSearch();
+    SharedPreferences.getInstance().then(
+      (prefs) => f.isAll
+          ? prefs.remove(_filterPref)
+          : prefs.setStringList(_filterPref, f.toJson()),
+    );
+  }
 
   @override
   void dispose() {
@@ -127,8 +150,7 @@ class _LibraryPanelState extends State<LibraryPanel> {
         listenable: Listenable.merge([lib, player]),
         builder: (context, _) => LayoutBuilder(
           builder: (context, box) {
-            final searching =
-                _query.trim().isNotEmpty || _filter != FormatFilter.all;
+            final searching = _query.trim().isNotEmpty || !_filter.isAll;
             // Short screens (phones and handhelds in landscape): one toolbar
             // row instead of header + search box + filter chips + results
             // header, so most of the height goes to the list.
@@ -217,13 +239,6 @@ class _LibraryPanelState extends State<LibraryPanel> {
     );
   }
 
-  static const _filters = [
-    (FormatFilter.all, 'All', 'All formats'),
-    (FormatFilter.sid, 'C64', 'C64 SID'),
-    (FormatFilter.atari, 'ST', 'Atari ST'),
-    (FormatFilter.modules, 'MOD', 'Amiga & PC: MOD, XM, TFMX, FC'),
-  ];
-
   /// Everything on one row: search, format filter, match count and actions.
   Widget _compactBar(BuildContext context, List<LibraryTrack>? results) {
     const muted = TextStyle(
@@ -239,21 +254,11 @@ class _LibraryPanelState extends State<LibraryPanel> {
             child: _searchField(hint: 'Search ${lib.tracks.length} tunes'),
           ),
           const SizedBox(width: 6),
-          SegmentedButton<FormatFilter>(
-            showSelectedIcon: false,
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            segments: [
-              for (final (f, short, long) in _filters)
-                ButtonSegment(value: f, label: Text(short), tooltip: long),
-            ],
-            selected: {_filter},
-            onSelectionChanged: (v) {
-              _filter = v.first;
-              _runSearch();
-            },
+          FormatFilterButton(
+            filter: _filter,
+            counts: lib.formatCounts,
+            onChanged: _setFilter,
+            dense: true,
           ),
           if (results != null) ...[
             const SizedBox(width: 8),
@@ -298,30 +303,14 @@ class _LibraryPanelState extends State<LibraryPanel> {
   Widget _searchBox() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: Column(
+      child: Row(
         children: [
-          _searchField(hint: 'Search title, composer, group or year'),
-          const SizedBox(height: 8),
-          // Scrolls sideways if the panel is too narrow for every chip.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final (f, _, label) in _filters)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ChoiceChip(
-                      label: Text(label),
-                      selected: _filter == f,
-                      visualDensity: VisualDensity.compact,
-                      onSelected: (_) {
-                        _filter = f;
-                        _runSearch();
-                      },
-                    ),
-                  ),
-              ],
-            ),
+          Expanded(child: _searchField(hint: 'Search tunes')),
+          const SizedBox(width: 8),
+          FormatFilterButton(
+            filter: _filter,
+            counts: lib.formatCounts,
+            onChanged: _setFilter,
           ),
         ],
       ),

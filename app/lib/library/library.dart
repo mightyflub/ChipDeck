@@ -68,6 +68,8 @@ class LibraryTrack {
 
   bool get isModule => system == TuneSystem.amiga || system == TuneSystem.pc;
 
+  late final String formatKey = libraryFormatKey(system, kind);
+
   late final String _blob =
       '$title\n$author\n$released\n${p.basename(path)}\n${p.basename(p.dirname(path))}'
           .toLowerCase();
@@ -137,7 +139,128 @@ class LibraryFolder {
   String get name => p.basename(path);
 }
 
-enum FormatFilter { all, sid, atari, modules }
+/// One format the library can filter on. Formats are grouped by system;
+/// the same short name can appear under two systems (TFMX on the Amiga and
+/// TFMX-ST on the Atari ST), so a format is identified by both.
+class TuneFormat {
+  const TuneFormat(this.system, this.kind, this.label);
+  final TuneSystem system;
+  final String kind; // as LibraryTrack.kind
+  final String label; // shown in the filter menu
+  String get key => libraryFormatKey(system, kind);
+}
+
+String libraryFormatKey(TuneSystem system, String kind) =>
+    '${system.name}/$kind';
+
+/// Every format the filter offers, by system. A new format only needs a
+/// line here (and a case in LibraryTrack.kind).
+const formatGroups = <(TuneSystem, String, List<TuneFormat>)>[
+  (
+    TuneSystem.c64,
+    'Commodore 64',
+    [
+      TuneFormat(TuneSystem.c64, 'SID', 'SID (PSID)'),
+      TuneFormat(TuneSystem.c64, 'RSID', 'RSID'),
+    ],
+  ),
+  (
+    TuneSystem.atariSt,
+    'Atari ST',
+    [
+      TuneFormat(TuneSystem.atariSt, 'SNDH', 'SNDH'),
+      TuneFormat(TuneSystem.atariSt, 'YM', 'YM'),
+      TuneFormat(TuneSystem.atariSt, 'TFMX', 'TFMX-ST'),
+    ],
+  ),
+  (
+    TuneSystem.amiga,
+    'Amiga',
+    [
+      TuneFormat(TuneSystem.amiga, 'MOD', 'MOD'),
+      TuneFormat(TuneSystem.amiga, 'TFMX', 'TFMX'),
+      TuneFormat(TuneSystem.amiga, 'FC', 'Future Composer'),
+    ],
+  ),
+  (TuneSystem.pc, 'PC', [TuneFormat(TuneSystem.pc, 'XM', 'XM')]),
+];
+
+/// Library format filter: a set of format keys. Empty means every format.
+@immutable
+class FormatFilter {
+  const FormatFilter([this.keys = const {}]);
+  static const all = FormatFilter();
+
+  final Set<String> keys;
+
+  bool get isAll => keys.isEmpty;
+  bool accepts(LibraryTrack t) => keys.isEmpty || keys.contains(t.formatKey);
+
+  /// All formats of [system] selected (none selected counts as no).
+  bool hasSystem(TuneSystem system) => _systemKeys(system).every(keys.contains);
+
+  FormatFilter toggle(String key) {
+    final k = {...keys};
+    if (!k.remove(key)) k.add(key);
+    return FormatFilter(_normalise(k));
+  }
+
+  FormatFilter toggleSystem(TuneSystem system) {
+    final sk = _systemKeys(system);
+    final k = {...keys};
+    if (hasSystem(system)) {
+      k.removeAll(sk);
+    } else {
+      k.addAll(sk);
+    }
+    return FormatFilter(_normalise(k));
+  }
+
+  /// Short description for the filter button, e.g. "C64 + ST" or "SNDH, YM".
+  String get summary {
+    if (isAll) return 'All formats';
+    final parts = <String>[];
+    for (final (sys, _, formats) in formatGroups) {
+      if (hasSystem(sys) && formats.length > 1) {
+        parts.add(sys.label);
+      } else {
+        for (final f in formats) {
+          if (keys.contains(f.key)) parts.add(f.label);
+        }
+      }
+    }
+    if (parts.length > 3) return '${keys.length} formats';
+    return parts.join(', ');
+  }
+
+  // Every format selected is the same as no filter.
+  static Set<String> _normalise(Set<String> k) {
+    final every = [
+      for (final g in formatGroups)
+        for (final f in g.$3) f.key,
+    ];
+    return every.every(k.contains) ? const {} : Set.unmodifiable(k);
+  }
+
+  static Iterable<String> _systemKeys(TuneSystem system) => formatGroups
+      .where((g) => g.$1 == system)
+      .expand((g) => g.$3)
+      .map((f) => f.key);
+
+  List<String> toJson() => keys.toList()..sort();
+
+  static FormatFilter fromJson(List<String>? j) =>
+      j == null ? all : FormatFilter(_normalise(j.toSet()));
+
+  @override
+  bool operator ==(Object other) =>
+      other is FormatFilter &&
+      other.keys.length == keys.length &&
+      other.keys.containsAll(keys);
+
+  @override
+  int get hashCode => Object.hashAllUnordered(keys);
+}
 
 class ScanProgress {
   const ScanProgress(this.done, this.total, this.phase);
@@ -407,6 +530,23 @@ class LibraryController extends ChangeNotifier {
       if (p.isWithin(dir, t.path)) t,
   ];
 
+  /// How many tunes of each format the library holds (by format key).
+  Map<String, int> get formatCounts {
+    final key = (identityHashCode(tracks), tracks.length);
+    if (key != _countsKey) {
+      final m = <String, int>{};
+      for (final t in tracks) {
+        m[t.formatKey] = (m[t.formatKey] ?? 0) + 1;
+      }
+      _counts = m;
+      _countsKey = key;
+    }
+    return _counts;
+  }
+
+  Map<String, int> _counts = const {};
+  Object? _countsKey;
+
   List<LibraryTrack> search(
     String query, {
     FormatFilter filter = FormatFilter.all,
@@ -419,11 +559,7 @@ class LibraryController extends ChangeNotifier {
         .toList();
     final out = <LibraryTrack>[];
     for (final t in tracks) {
-      if (filter == FormatFilter.sid && t.system != TuneSystem.c64) continue;
-      if (filter == FormatFilter.atari && t.system != TuneSystem.atariSt) {
-        continue;
-      }
-      if (filter == FormatFilter.modules && !t.isModule) continue;
+      if (!filter.accepts(t)) continue;
       if (tokens.isNotEmpty && !t.matches(tokens)) continue;
       out.add(t);
       if (out.length >= limit) break;
